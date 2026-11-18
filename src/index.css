@@ -1,0 +1,232 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Cinzel', 'Noto Serif SC', Georgia, serif;
+    --font-sans: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #0b0e14;
+    color: #f1f5f9;
+    overflow-x: hidden;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes hitShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px) rotate(-1.5deg); }
+  40% { transform: translateX(7px) rotate(1.5deg); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(4px); }
+}
+
+@keyframes lungeRight {
+  0% { transform: translateX(0); }
+  35% { transform: translateX(28px) scale(1.03); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes lungeLeft {
+  0% { transform: translateX(0); }
+  35% { transform: translateX(-28px) scale(1.03); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes floatDamage {
+  0% { opacity: 0; transform: translateY(8px) scale(0.85); }
+  20% { opacity: 1; transform: translateY(-6px) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-42px) scale(0.95); }
+}
+
+@keyframes gentleBob {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes splashFadeUp {
+  0% { opacity: 0; transform: translateY(18px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0px) scale(1); }
+}
+
+@keyframes splashLineExpand {
+  0% { transform: scaleX(0); opacity: 0; }
+  100% { transform: scaleX(1); opacity: 1; }
+}
+
+@keyframes splashEmberGlow {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.06); }
+}
+
+.animate-hit-shake {
+  animation: hitShake 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-lunge-right {
+  animation: lungeRight 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-lunge-left {
+  animation: lungeLeft 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-float-dmg {
+  animation: floatDamage 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-gentle-bob {
+  animation: gentleBob 3.4s ease-in-out infinite;
+}
+
+.animate-splash-up {
+  animation: splashFadeUp 0.85s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-splash-line {
+  animation: splashLineExpand 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+}
+
+.animate-splash-glow {
+  animation: splashEmberGlow 2.4s ease-in-out infinite;
+}
+
+@keyframes arenaShake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-7px, 3px, 0); }
+  45% { transform: translate3d(6px, -3px, 0); }
+  70% { transform: translate3d(-4px, 2px, 0); }
+}
+
+@keyframes bgParallaxShake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(4px, -2px, 0); }
+  45% { transform: translate3d(-4px, 2px, 0); }
+  70% { transform: translate3d(2px, -1px, 0); }
+}
+
+@keyframes arenaBgDrift {
+  0%, 100% { transform: translate3d(-1.2%, 0%, 0) scale(1.1); }
+  50% { transform: translate3d(1.2%, -0.6%, 0) scale(1.125); }
+}
+
+@keyframes arenaMistScroll {
+  0%, 100% { transform: translate3d(-3%, 0%, 0); opacity: 0.45; }
+  50% { transform: translate3d(3%, -1%, 0); opacity: 0.68; }
+}
+
+@keyframes slashSweep {
+  0% { opacity: 0; transform: scale(0.55) rotate(-18deg); }
+  25% { opacity: 1; transform: scale(1.08) rotate(2deg); }
+  100% { opacity: 0; transform: scale(1.25) rotate(8deg); }
+}
+
+@keyframes impactShockwave {
+  0% { opacity: 0.95; transform: scale(0.3); }
+  60% { opacity: 0.7; transform: scale(1.15); }
+  100% { opacity: 0; transform: scale(1.45); }
+}
+
+@keyframes shieldPulse {
+  0% { opacity: 0; transform: scale(0.75); }
+  28% { opacity: 1; transform: scale(1.04); }
+  70% { opacity: 0.8; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+
+@keyframes poisonBurst {
+  0% { opacity: 0; transform: scale(0.5) translateY(10px); }
+  35% { opacity: 0.95; transform: scale(1.06) translateY(-4px); }
+  100% { opacity: 0; transform: scale(1.22) translateY(-18px); }
+}
+
+@keyframes powerAuraRise {
+  0% { opacity: 0; transform: scaleY(0.4) translateY(20px); }
+  35% { opacity: 0.95; transform: scaleY(1.05) translateY(0px); }
+  100% { opacity: 0; transform: scaleY(1.2) translateY(-22px); }
+}
+
+.animate-arena-shake {
+  animation: arenaShake 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-bg-parallax-shake {
+  animation: bgParallaxShake 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-arena-bg-drift {
+  animation: arenaBgDrift 26s ease-in-out infinite;
+}
+
+.animate-arena-mist-scroll {
+  animation: arenaMistScroll 18s ease-in-out infinite;
+}
+
+.animate-slash-sweep {
+  animation: slashSweep 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-impact-ring {
+  animation: impactShockwave 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-shield-pulse {
+  animation: shieldPulse 0.48s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-poison-burst {
+  animation: poisonBurst 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-power-aura {
+  animation: powerAuraRise 0.58s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-hit-shake,
+  .animate-lunge-right,
+  .animate-lunge-left,
+  .animate-float-dmg,
+  .animate-gentle-bob,
+  .animate-splash-up,
+  .animate-splash-line,
+  .animate-splash-glow,
+  .animate-arena-shake,
+  .animate-bg-parallax-shake,
+  .animate-arena-bg-drift,
+  .animate-arena-mist-scroll,
+  .animate-slash-sweep,
+  .animate-impact-ring,
+  .animate-shield-pulse,
+  .animate-poison-burst,
+  .animate-power-aura {
+    animation: none !important;
+  }
+}
+
+/* Custom subtle scrollbars for deck overlays */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}

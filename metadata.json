@@ -1,0 +1,6 @@
+{
+  "name": "烬塔 · Spire of Ashes",
+  "description": "硬核 Roguelike 卡牌构筑爬塔策略游戏：双职业流派、动态意图预判、遗物药水协同与十五层深渊试炼。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
