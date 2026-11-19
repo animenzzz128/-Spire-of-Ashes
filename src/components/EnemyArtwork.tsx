@@ -45,16 +45,6 @@ const ENEMY_IMAGE_MAP: Partial<Record<EnemyArtType, { src: string; alt: string; 
     alt: '沉睡石像鬼',
     border: 'border-violet-500/45',
   },
-  looter: {
-    src: '/src/assets/images/enemy_looter_art_1795035996368.jpg',
-    alt: '尖塔掠夺者',
-    border: 'border-rose-500/40',
-  },
-  sentry: {
-    src: '/src/assets/images/enemy_sentry_art_1795036001281.jpg',
-    alt: '古代哨兵',
-    border: 'border-cyan-500/45',
-  },
 };
 
 export const EnemyArtwork: React.FC<EnemyArtworkProps> = ({

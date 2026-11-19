@@ -1,4 +1,3 @@
-import { rand } from './rng';
 import { RelicDef } from './types';
 
 export const RELIC_DEFS: Record<string, RelicDef> = {
@@ -100,20 +99,6 @@ export const RELIC_DEFS: Record<string, RelicDef> = {
     description: '每回合基础能量上限 +1。',
     iconKey: 'core',
   },
-  bronze_scales: {
-    id: 'bronze_scales',
-    name: '青铜鳞甲',
-    rarity: 'common',
-    description: '每场战斗开始时，获得 3 层荆棘（受攻击反弹伤害）。',
-    iconKey: 'scales',
-  },
-  thread_and_needle: {
-    id: 'thread_and_needle',
-    name: '秘银针线',
-    rarity: 'uncommon',
-    description: '每场战斗开始时，获得 4 层多层护甲（每回合结束+4格挡）。',
-    iconKey: 'needle',
-  },
 };
 
 export function rollRelic(ownedIds: string[], includeRare = true): RelicDef {
@@ -127,5 +112,5 @@ export function rollRelic(ownedIds: string[], includeRare = true): RelicDef {
   if (pool.length === 0) {
     return RELIC_DEFS.ashen_fang;
   }
-  return pool[Math.floor(rand() * pool.length)];
+  return pool[Math.floor(Math.random() * pool.length)];
 }
