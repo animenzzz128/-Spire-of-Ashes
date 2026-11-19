@@ -1,13 +1,14 @@
+import { rand } from './rng';
 import { MapNode, NodeType } from './types';
 
 export const TOTAL_FLOORS = 15;
 
-export function generateSpireMap(): MapNode[] {
+export function generateSpireMap(opts?: { eliteBoost?: boolean }): MapNode[] {
   const floors: MapNode[][] = [];
 
   // Floor 1..14 have 3-4 nodes distributed across cols 0..6
   for (let floor = 1; floor <= 14; floor++) {
-    const count = floor === 1 ? 3 : floor === 8 ? 3 : floor === 14 ? 3 : Math.random() < 0.55 ? 4 : 3;
+    const count = floor === 1 ? 3 : floor === 8 ? 3 : floor === 14 ? 3 : rand() < 0.55 ? 4 : 3;
     const colsPool = [0, 1, 2, 3, 4, 5, 6];
     const chosenCols: number[] = [];
 
@@ -18,7 +19,7 @@ export function generateSpireMap(): MapNode[] {
     }
     // Add slight organic jitter while keeping order
     for (let i = 0; i < chosenCols.length; i++) {
-      const jitter = Math.random() < 0.35 ? (Math.random() < 0.5 ? -1 : 1) : 0;
+      const jitter = rand() < 0.35 ? (rand() < 0.5 ? -1 : 1) : 0;
       const candidate = chosenCols[i] + jitter;
       if (
         candidate >= 0 &&
@@ -35,7 +36,7 @@ export function generateSpireMap(): MapNode[] {
       id: `f${floor}_c${col}`,
       floor,
       col,
-      type: pickNodeType(floor),
+      type: pickNodeType(floor, Boolean(opts?.eliteBoost)),
       nextIds: [],
       visited: false,
     }));
@@ -73,7 +74,7 @@ export function generateSpireMap(): MapNode[] {
       incomingCount.set(primary.id, (incomingCount.get(primary.id) || 0) + 1);
 
       // 45% chance to also branch to second-closest node if within distance 2
-      if (sortedNext.length > 1 && Math.abs(sortedNext[1].col - node.col) <= 2 && Math.random() < 0.45) {
+      if (sortedNext.length > 1 && Math.abs(sortedNext[1].col - node.col) <= 2 && rand() < 0.45) {
         if (!node.nextIds.includes(sortedNext[1].id)) {
           node.nextIds.push(sortedNext[1].id);
           incomingCount.set(sortedNext[1].id, (incomingCount.get(sortedNext[1].id) || 0) + 1);
@@ -97,28 +98,29 @@ export function generateSpireMap(): MapNode[] {
   return floors.flat();
 }
 
-function pickNodeType(floor: number): NodeType {
+function pickNodeType(floor: number, eliteBoost = false): NodeType {
   if (floor === 1) return 'monster';
   if (floor === 8) return 'treasure';
   if (floor === 14) return 'rest';
 
-  const r = Math.random();
+  const r = rand();
   if (floor <= 4) {
+    if (eliteBoost && floor >= 3 && r < 0.14) return 'elite';
     if (r < 0.56) return 'monster';
     if (r < 0.84) return 'event';
     return 'shop';
   }
   if (floor <= 10) {
-    if (r < 0.40) return 'monster';
-    if (r < 0.60) return 'event';
-    if (r < 0.76) return 'elite';
+    if (r < 0.36) return 'monster';
+    if (r < 0.55) return 'event';
+    if (r < (eliteBoost ? 0.80 : 0.74)) return 'elite';
     if (r < 0.90) return 'rest';
     return 'shop';
   }
   // Upper floors 11-13
-  if (r < 0.36) return 'monster';
-  if (r < 0.56) return 'elite';
-  if (r < 0.74) return 'rest';
-  if (r < 0.88) return 'event';
+  if (r < 0.32) return 'monster';
+  if (r < (eliteBoost ? 0.64 : 0.54)) return 'elite';
+  if (r < 0.76) return 'rest';
+  if (r < 0.89) return 'event';
   return 'shop';
 }

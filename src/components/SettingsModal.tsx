@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Globe, PlayCircle, Settings, Trash2, Volume2, VolumeX, X } from 'lucide-react';
+import { Globe, PlayCircle, Settings, Sliders, Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { Locale, UI_COPY } from '../game/i18n';
 
 interface SettingsModalProps {
   locale: Locale;
   muted: boolean;
+  volume: number;
   hasSavedRun: boolean;
   onSetLocale: (loc: Locale) => void;
   onToggleMute: () => void;
+  onChangeVolume: (vol: number) => void;
   onReplayIntro: () => void;
   onClearSavedRun: () => void;
   onClose: () => void;
@@ -16,9 +18,11 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   locale,
   muted,
+  volume,
   hasSavedRun,
   onSetLocale,
   onToggleMute,
+  onChangeVolume,
   onReplayIntro,
   onClearSavedRun,
   onClose,
@@ -79,27 +83,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Audio */}
-          <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#161c26] p-4">
-            <div className="flex items-center gap-2.5 text-sm font-medium text-slate-200">
-              {muted ? (
-                <VolumeX className="h-4 w-4 text-rose-400" />
-              ) : (
-                <Volume2 className="h-4 w-4 text-emerald-400" />
-              )}
-              <span>{copy.soundLabel}</span>
+          {/* Audio Mute & Volume */}
+          <div className="space-y-3 rounded-xl border border-white/10 bg-[#161c26] p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 text-sm font-medium text-slate-200">
+                {muted ? (
+                  <VolumeX className="h-4 w-4 text-rose-400" />
+                ) : (
+                  <Volume2 className="h-4 w-4 text-emerald-400" />
+                )}
+                <span>{copy.soundLabel}</span>
+              </div>
+              <button
+                type="button"
+                onClick={onToggleMute}
+                className={`rounded-lg border px-4 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                  muted
+                    ? 'border-rose-500/40 bg-rose-950/50 text-rose-300'
+                    : 'border-emerald-500/40 bg-emerald-950/50 text-emerald-300'
+                }`}
+              >
+                {muted ? copy.soundOff : copy.soundOn}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={onToggleMute}
-              className={`rounded-lg border px-4 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
-                muted
-                  ? 'border-rose-500/40 bg-rose-950/50 text-rose-300'
-                  : 'border-emerald-500/40 bg-emerald-950/50 text-emerald-300'
-              }`}
-            >
-              {muted ? copy.soundOff : copy.soundOn}
-            </button>
+
+            <div className="flex items-center gap-3 border-t border-white/8 pt-3">
+              <div className="flex items-center gap-2 text-xs text-slate-400 whitespace-nowrap">
+                <Sliders className="h-3.5 w-3.5 text-amber-400" />
+                <span>{copy.volumeLabel}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={Math.round(volume * 100)}
+                onChange={(e) => onChangeVolume(parseInt(e.target.value, 10) / 100)}
+                disabled={muted}
+                aria-label={copy.volumeLabel}
+                className="flex-1 accent-amber-400 cursor-pointer disabled:opacity-40"
+              />
+              <span className="w-10 text-right font-mono-num text-xs font-bold text-slate-200">
+                {muted ? '0%' : `${Math.round(volume * 100)}%`}
+              </span>
+            </div>
           </div>
 
           {/* Replay Intro */}

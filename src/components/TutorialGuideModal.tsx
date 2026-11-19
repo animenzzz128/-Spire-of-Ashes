@@ -12,20 +12,23 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { Locale } from '../game/i18n';
+import { Locale, UI_COPY } from '../game/i18n';
 
 interface TutorialGuideModalProps {
   locale: Locale;
+  isOnboarding?: boolean;
   onClose: () => void;
   onComplete?: () => void;
 }
 
 export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
   locale,
+  isOnboarding = false,
   onClose,
   onComplete,
 }) => {
   const [step, setStep] = useState(0);
+  const copy = UI_COPY[locale];
 
   // Interactive Step 2 state: Block defense drill
   const [drill2Energy, setDrill2Energy] = useState(3);
@@ -445,15 +448,26 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
         </div>
 
         {/* Footer Controls */}
-        <div className="flex items-center justify-between border-t border-white/10 px-6 py-4">
-          <button
-            type="button"
-            disabled={step === 0}
-            onClick={() => setStep((s) => Math.max(0, s - 1))}
-            className="rounded-xl border border-white/12 px-4 py-2 text-xs font-medium text-slate-300 hover:text-white disabled:opacity-35 cursor-pointer disabled:cursor-not-allowed"
-          >
-            {zh ? '上一步' : 'Previous'}
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={step === 0}
+              onClick={() => setStep((s) => Math.max(0, s - 1))}
+              className="rounded-xl border border-white/12 px-4 py-2 text-xs font-medium text-slate-300 hover:text-white disabled:opacity-35 cursor-pointer disabled:cursor-not-allowed"
+            >
+              {zh ? '上一步' : 'Previous'}
+            </button>
+            {isOnboarding && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-white/10 px-3.5 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                {copy.skipTutorial}
+              </button>
+            )}
+          </div>
 
           <button
             type="button"
@@ -467,7 +481,17 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
             }}
             className="flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-2.5 text-sm font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
           >
-            <span>{isLast ? (zh ? '完成引导' : 'Finish Tutorial') : zh ? '下一步' : 'Next'}</span>
+            <span>
+              {isLast
+                ? isOnboarding
+                  ? copy.finishStartClimb
+                  : zh
+                  ? '完成引导'
+                  : 'Finish Tutorial'
+                : zh
+                ? '下一步'
+                : 'Next'}
+            </span>
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>

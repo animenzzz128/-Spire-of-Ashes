@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Award } from 'lucide-react';
+import { AchievementsModal } from './components/AchievementsModal';
+import { CardCompendiumModal } from './components/CardCompendiumModal';
 import { CombatArenaView } from './components/CombatArenaView';
 import { DamageStatsModal } from './components/DamageStatsModal';
 import { GlossaryModal } from './components/GlossaryModal';
@@ -16,6 +19,16 @@ import { SpireMapView } from './components/SpireMapView';
 import { TitleScreenView } from './components/TitleScreenView';
 import { TopHudBar } from './components/TopHudBar';
 import { TutorialGuideModal } from './components/TutorialGuideModal';
+import {
+  ACHIEVEMENTS,
+  AchievementDef,
+  AchievementEvalContext,
+  MetaProgress,
+  evaluateAchievements,
+  loadMetaProgress,
+  saveMetaProgress,
+  tAchievement,
+} from './game/achievements';
 import { CARD_DEFS } from './game/cards';
 import {
   addPotionToSlot,
@@ -75,20 +88,42 @@ export default function App() {
 
   const [playSplash, setPlaySplash] = useState(true);
   const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState<number>(() => sound.volume);
 
   const [showDeckModal, setShowDeckModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
+  const [showCompendiumModal, setShowCompendiumModal] = useState(false);
+  const [showAchievementsModal, setShowAchievementsModal] = useState(false);
   const [showGlossaryModal, setShowGlossaryModal] = useState(false);
   const [showTutorialModal, setShowTutorialModal] = useState(false);
+  const [onboardingTutorialActive, setOnboardingTutorialActive] = useState(false);
+  const [showGuideOnNewRun, setShowGuideOnNewRun] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('spire_ashes_guide_on_start');
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showMapOverlay, setShowMapOverlay] = useState(false);
+
+  const [metaProgress, setMetaProgress] = useState<MetaProgress>(() => loadMetaProgress());
+  const metaProgressRef = useRef<MetaProgress>(metaProgress);
+  const [achievementToasts, setAchievementToasts] = useState<AchievementDef[]>([]);
+  const lastTrackedRunRef = useRef<{
+    enemies: number;
+    elites: number;
+    damage: number;
+    victoryCounted: boolean;
+  }>({ enemies: 0, elites: 0, damage: 0, victoryCounted: false });
 
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
   const [combatVfx, setCombatVfx] = useState<CombatVfx[]>([]);
   const [arenaShake, setArenaShake] = useState(false);
   const [hitPlayer, setHitPlayer] = useState(false);
   const [heroAttacking, setHeroAttacking] = useState(false);
-  const [enemyAttacking, setEnemyAttacking] = useState(false);
+  const [attackingEnemyUids, setAttackingEnemyUids] = useState<string[]>([]);
   const [hitEnemyUids, setHitEnemyUids] = useState<string[]>([]);
   const [pendingPotionSlot, setPendingPotionSlot] = useState<number | null>(null);
 
@@ -183,6 +218,73 @@ export default function App() {
     }
   }, [runState?.phase]);
 
+  const applyMetaEvaluation = (run: RunState | null, ctx: AchievementEvalContext = {}) => {
+    const { nextMeta, newlyUnlocked } = evaluateAchievements(metaProgressRef.current, run, ctx);
+    metaProgressRef.current = nextMeta;
+    setMetaProgress(nextMeta);
+    saveMetaProgress(nextMeta);
+    if (newlyUnlocked.length > 0) {
+      sound.buff();
+      setAchievementToasts((tPrev) => [...tPrev, ...newlyUnlocked]);
+      setTimeout(() => {
+        const ids = new Set(newlyUnlocked.map((u) => u.id));
+        setAchievementToasts((tPrev) => tPrev.filter((item) => !ids.has(item.id)));
+      }, 4000);
+    }
+  };
+
+  // Sync run progress (enemies defeated, elites, damage, block, poison, discovered cards, victory)
+  useEffect(() => {
+    if (!runState) return;
+    const prev = lastTrackedRunRef.current;
+    const enemiesDelta = Math.max(0, runState.stats.enemiesDefeated - prev.enemies);
+    const elitesDelta = Math.max(0, runState.stats.elitesDefeated - prev.elites);
+    const damageDelta = Math.max(0, runState.stats.totalDamageDealt - prev.damage);
+    const isNewVictory = runState.phase === 'VICTORY' && !prev.victoryCounted;
+
+    lastTrackedRunRef.current = {
+      enemies: runState.stats.enemiesDefeated,
+      elites: runState.stats.elitesDefeated,
+      damage: runState.stats.totalDamageDealt,
+      victoryCounted: prev.victoryCounted || runState.phase === 'VICTORY',
+    };
+
+    applyMetaEvaluation(runState, {
+      enemiesDefeatedDelta: enemiesDelta,
+      elitesDefeatedDelta: elitesDelta,
+      damageDelta,
+      isNewVictory,
+    });
+  }, [runState]);
+
+  // Global Escape key to close top-most open modal
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showSettingsModal) setShowSettingsModal(false);
+      else if (showTutorialModal) {
+        setShowTutorialModal(false);
+        setOnboardingTutorialActive(false);
+      } else if (showAchievementsModal) setShowAchievementsModal(false);
+      else if (showCompendiumModal) setShowCompendiumModal(false);
+      else if (showGlossaryModal) setShowGlossaryModal(false);
+      else if (showStatsModal) setShowStatsModal(false);
+      else if (showDeckModal) setShowDeckModal(false);
+      else if (showMapOverlay) setShowMapOverlay(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [
+    showSettingsModal,
+    showTutorialModal,
+    showAchievementsModal,
+    showCompendiumModal,
+    showGlossaryModal,
+    showStatsModal,
+    showDeckModal,
+    showMapOverlay,
+  ]);
+
   const handleToggleMute = () => {
     setMuted((prev) => {
       const next = !prev;
@@ -191,18 +293,53 @@ export default function App() {
     });
   };
 
+  const handleChangeVolume = (nextVol: number) => {
+    sound.setVolume(nextVol);
+    setVolume(nextVol);
+    sound.uiClick();
+  };
+
+  const handleToggleGuideOnNewRun = (enabled: boolean) => {
+    setShowGuideOnNewRun(enabled);
+    try {
+      localStorage.setItem('spire_ashes_guide_on_start', String(enabled));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   const handleStartRun = (heroId: HeroClassId, ascension = 0) => {
     sound.cardDraw();
-    setRunState(createNewRun(heroId, ascension));
+    const fresh = createNewRun(heroId, ascension);
+    lastTrackedRunRef.current = {
+      enemies: 0,
+      elites: 0,
+      damage: 0,
+      victoryCounted: false,
+    };
+    setRunState(fresh);
+    applyMetaEvaluation(fresh, { isNewRunStart: true });
     setShowDeckModal(false);
     setShowStatsModal(false);
     setShowMapOverlay(false);
     setPendingPotionSlot(null);
+    if (showGuideOnNewRun) {
+      setOnboardingTutorialActive(true);
+      setShowTutorialModal(true);
+    } else {
+      setOnboardingTutorialActive(false);
+    }
   };
 
   const handleResumeRun = () => {
     if (!savedRun) return;
     sound.cardDraw();
+    lastTrackedRunRef.current = {
+      enemies: savedRun.stats.enemiesDefeated,
+      elites: savedRun.stats.elitesDefeated,
+      damage: savedRun.stats.totalDamageDealt,
+      victoryCounted: savedRun.phase === 'VICTORY',
+    };
     setRunState(savedRun);
     setShowDeckModal(false);
     setShowStatsModal(false);
@@ -271,6 +408,14 @@ export default function App() {
       sound.buff();
     }
 
+    if (res.bossAwakened) {
+      isHeavyHit = true;
+      sound.bossAwaken();
+      runState.combat?.enemies
+        .filter((e) => e.isBoss)
+        .forEach((b) => vfxList.push({ targetUid: b.uid, type: 'power' }));
+    }
+
     spawnVfx(vfxList, isHeavyHit);
     pushCombatFeedback(
       res.events,
@@ -278,6 +423,10 @@ export default function App() {
       res.hitEnemyUids,
       def?.type === 'attack'
     );
+    const actionDmg = Math.max(0, res.state.stats.totalDamageDealt - runState.stats.totalDamageDealt);
+    if (actionDmg >= 35) {
+      applyMetaEvaluation(res.state, { actionDamage: actionDmg });
+    }
     setRunState(res.state);
   };
 
@@ -334,8 +483,14 @@ export default function App() {
   const handleEndTurn = () => {
     if (!runState || !runState.combat || runState.combat.enemyTurnInProgress) return;
     setPendingPotionSlot(null);
-    setEnemyAttacking(true);
-    setTimeout(() => setEnemyAttacking(false), 320);
+
+    const attackers = runState.combat.enemies
+      .filter((e) => e.hp > 0 && !e.asleep && (e.intent.damage || 0) > 0)
+      .map((e) => e.uid);
+    if (attackers.length > 0) {
+      setAttackingEnemyUids(attackers);
+      setTimeout(() => setAttackingEnemyUids([]), 320);
+    }
 
     setRunState((prev) =>
       prev && prev.combat
@@ -347,17 +502,30 @@ export default function App() {
       setRunState((current) => {
         if (!current || !current.combat) return current;
         const hadIncomingAttack = current.combat.enemies.some(
-          (e) => e.hp > 0 && (e.intent.damage || 0) > 0
+          (e) => e.hp > 0 && !e.asleep && (e.intent.damage || 0) > 0
         );
         const res = resolveEnemyTurn(current);
+        const enemySideVfx: { targetUid: string; type: CombatVfxType }[] = [];
+        (res.enemyDefendedUids || []).forEach((uid) =>
+          enemySideVfx.push({ targetUid: uid, type: 'shield' })
+        );
+        (res.enemyBuffedUids || []).forEach((uid) =>
+          enemySideVfx.push({ targetUid: uid, type: 'power' })
+        );
+
         if (res.hitPlayer) {
           sound.attack();
-          spawnVfx([{ targetUid: 'player', type: 'enemy_slash' }], true);
+          spawnVfx([{ targetUid: 'player', type: 'enemy_slash' }, ...enemySideVfx], true);
         } else if (hadIncomingAttack) {
-          sound.block();
-          spawnVfx([{ targetUid: 'player', type: 'shield' }]);
+          sound.shieldBlock();
+          spawnVfx([{ targetUid: 'player', type: 'shield' }, ...enemySideVfx]);
         } else {
-          sound.cardDraw();
+          if (enemySideVfx.length > 0) {
+            sound.buff();
+            spawnVfx(enemySideVfx);
+          } else {
+            sound.turnStart();
+          }
         }
         pushCombatFeedback(res.events, res.hitPlayer);
         if (res.state.combat) {
@@ -368,7 +536,7 @@ export default function App() {
         }
         return res.state;
       });
-    }, 420);
+    }, 400);
   };
 
   // Reward Handlers
@@ -546,16 +714,28 @@ export default function App() {
       {!runState ? (
         <TitleScreenView
           locale={locale}
-          bestRuns={bestVictories}
+          bestRuns={Math.max(bestVictories, metaProgress.totalVictories)}
           savedRun={savedRun}
           playSplash={playSplash}
+          showGuideOnNewRun={showGuideOnNewRun}
+          achievementUnlockedCount={Object.keys(metaProgress.unlocked).length}
+          achievementTotalCount={ACHIEVEMENTS.length}
+          discoveredCardsCount={metaProgress.discoveredCardIds.length}
+          totalCardsCount={Object.keys(CARD_DEFS).length}
+          onToggleGuideOnNewRun={handleToggleGuideOnNewRun}
           onSplashDone={() => setPlaySplash(false)}
           onToggleLocale={handleToggleLocale}
           onStartRun={handleStartRun}
           onResumeRun={handleResumeRun}
-          onOpenTutorial={() => setShowTutorialModal(true)}
+          onOpenCompendium={() => setShowCompendiumModal(true)}
+          onOpenAchievements={() => setShowAchievementsModal(true)}
+          onOpenTutorial={() => {
+            setOnboardingTutorialActive(false);
+            setShowTutorialModal(true);
+          }}
           onOpenGlossary={() => setShowGlossaryModal(true)}
           onOpenSettings={() => setShowSettingsModal(true)}
+          onUiClick={() => sound.uiClick()}
         />
       ) : (
         <>
@@ -567,6 +747,8 @@ export default function App() {
             onToggleMute={handleToggleMute}
             onOpenDeck={() => setShowDeckModal(true)}
             onOpenStats={() => setShowStatsModal(true)}
+            onOpenCompendium={() => setShowCompendiumModal(true)}
+            onOpenAchievements={() => setShowAchievementsModal(true)}
             onOpenGlossary={() => setShowGlossaryModal(true)}
             onOpenSettings={() => setShowSettingsModal(true)}
             onToggleMapOverlay={() => setShowMapOverlay((v) => !v)}
@@ -588,9 +770,19 @@ export default function App() {
                 arenaShake={arenaShake}
                 hitPlayer={hitPlayer}
                 heroAttacking={heroAttacking}
-                enemyAttacking={enemyAttacking}
+                attackingEnemyUids={attackingEnemyUids}
                 hitEnemyUids={hitEnemyUids}
                 pendingPotionSlot={pendingPotionSlot}
+                hotkeysDisabled={
+                  showDeckModal ||
+                  showStatsModal ||
+                  showCompendiumModal ||
+                  showAchievementsModal ||
+                  showGlossaryModal ||
+                  showSettingsModal ||
+                  showTutorialModal ||
+                  showMapOverlay
+                }
                 onCancelPendingPotion={() => setPendingPotionSlot(null)}
                 onPlayCard={handlePlayCard}
                 onDiscardCard={handleDiscardCard}
@@ -693,11 +885,33 @@ export default function App() {
         </>
       )}
 
+      {/* Card Compendium Modal */}
+      {showCompendiumModal && (
+        <CardCompendiumModal
+          locale={locale}
+          discoveredCardIds={metaProgress.discoveredCardIds}
+          onClose={() => setShowCompendiumModal(false)}
+        />
+      )}
+
+      {/* Achievements Hall Modal */}
+      {showAchievementsModal && (
+        <AchievementsModal
+          locale={locale}
+          meta={metaProgress}
+          onClose={() => setShowAchievementsModal(false)}
+        />
+      )}
+
       {/* Interactive Tutorial Modal */}
       {showTutorialModal && (
         <TutorialGuideModal
           locale={locale}
-          onClose={() => setShowTutorialModal(false)}
+          isOnboarding={onboardingTutorialActive}
+          onClose={() => {
+            setShowTutorialModal(false);
+            setOnboardingTutorialActive(false);
+          }}
         />
       )}
 
@@ -714,9 +928,11 @@ export default function App() {
         <SettingsModal
           locale={locale}
           muted={muted}
+          volume={volume}
           hasSavedRun={Boolean(savedRun)}
           onSetLocale={handleSetLocale}
           onToggleMute={handleToggleMute}
+          onChangeVolume={handleChangeVolume}
           onReplayIntro={() => {
             setRunState(null);
             setPlaySplash(true);
@@ -724,6 +940,31 @@ export default function App() {
           onClearSavedRun={handleClearSavedRun}
           onClose={() => setShowSettingsModal(false)}
         />
+      )}
+
+      {/* Achievement Unlock Toasts */}
+      {achievementToasts.length > 0 && (
+        <div className="pointer-events-none fixed top-16 right-4 z-[60] flex flex-col gap-2">
+          {achievementToasts.map((ach) => {
+            const txt = tAchievement(ach, locale);
+            return (
+              <div
+                key={ach.id}
+                className="flex items-center gap-3 rounded-xl border border-amber-400/65 bg-[#141a26]/96 px-4 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.8)] backdrop-blur-md"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-400/45 bg-amber-950/60">
+                  <Award className="h-5 w-5 text-amber-300" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold text-amber-300">
+                    {copy.achievementUnlocked}
+                  </div>
+                  <div className="text-sm font-bold text-slate-100">{txt.name}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
