@@ -35,6 +35,7 @@ import {
 import { CardView } from './CardView';
 import { EnemyArtwork } from './EnemyArtwork';
 import { PileModal } from './PileModal';
+import { assetUrl } from '../game/assets';
 
 interface CombatArenaViewProps {
   state: RunState;
@@ -58,7 +59,7 @@ interface CombatArenaViewProps {
 function getCombatSceneTheme(state: RunState, isElite: boolean, isBoss: boolean, locale: Locale) {
   if (isBoss || state.floor >= 12) {
     return {
-      src: '/src/assets/images/arena_abyss_bg_1795032741817.jpg',
+      src: assetUrl('src/assets/images/arena_abyss_bg_1795032741817.jpg'),
       biome: locale === 'zh' ? '烈焰深渊' : 'Infernal Abyss',
       scrim: 'from-[#0b0e14]/78 via-[#180a10]/38 to-[#0b0e14]/95',
       mistGradient:
@@ -67,7 +68,7 @@ function getCombatSceneTheme(state: RunState, isElite: boolean, isBoss: boolean,
   }
   if (isElite || state.floor >= 6) {
     return {
-      src: '/src/assets/images/arena_dungeon_bg_1795032737599.jpg',
+      src: assetUrl('src/assets/images/arena_dungeon_bg_1795032737599.jpg'),
       biome: locale === 'zh' ? '黑曜地牢' : 'Obsidian Dungeon',
       scrim: 'from-[#0b0e14]/78 via-[#0d1220]/40 to-[#0b0e14]/95',
       mistGradient:
@@ -75,7 +76,7 @@ function getCombatSceneTheme(state: RunState, isElite: boolean, isBoss: boolean,
     };
   }
   return {
-    src: '/src/assets/images/arena_forest_bg_1795032741250.jpg',
+    src: assetUrl('src/assets/images/arena_forest_bg_1795032741250.jpg'),
     biome: locale === 'zh' ? '幽暗密林' : 'Whispering Forest',
     scrim: 'from-[#0b0e14]/78 via-[#0a1612]/38 to-[#0b0e14]/95',
     mistGradient:

@@ -1,4 +1,5 @@
 import { HeroClassDef, HeroClassId } from './types';
+import { assetUrl } from './assets';
 
 export const HERO_CLASSES: Record<HeroClassId, HeroClassDef> = {
   ironwarden: {
@@ -9,8 +10,8 @@ export const HERO_CLASSES: Record<HeroClassId, HeroClassDef> = {
     maxHp: 80,
     startingGold: 99,
     starterRelicId: 'bloodfire_sigil',
-    portraitUrl: '/src/assets/images/hero_ironwarden_portrait_1795024242240.jpg',
-    standeeUrl: '/src/assets/images/standee_ironwarden_full_1795028066506.jpg',
+    portraitUrl: assetUrl('src/assets/images/hero_ironwarden_portrait_1795024242240.jpg'),
+    standeeUrl: assetUrl('src/assets/images/standee_ironwarden_full_1795028066506.jpg'),
     accentColor: '#dc2626',
     archetypes: ['力量爆发', '厚重堡垒', '自伤换能'],
     description:
@@ -24,8 +25,8 @@ export const HERO_CLASSES: Record<HeroClassId, HeroClassDef> = {
     maxHp: 70,
     startingGold: 99,
     starterRelicId: 'nightweave_ring',
-    portraitUrl: '/src/assets/images/hero_shadowweaver_portrait_1795024247728.jpg',
-    standeeUrl: '/src/assets/images/standee_shadowweaver_full_1795028063521.jpg',
+    portraitUrl: assetUrl('src/assets/images/hero_shadowweaver_portrait_1795024247728.jpg'),
+    standeeUrl: assetUrl('src/assets/images/standee_shadowweaver_full_1795028063521.jpg'),
     accentColor: '#10b981',
     archetypes: ['剧毒叠层', '零费飞刀', '过牌弃牌'],
     description:

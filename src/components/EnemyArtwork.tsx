@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { EnemyArtType } from '../game/types';
+import { assetUrl } from '../game/assets';
 
 interface EnemyArtworkProps {
   artType: EnemyArtType;
@@ -10,37 +11,37 @@ interface EnemyArtworkProps {
 
 const ENEMY_IMAGE_MAP: Partial<Record<EnemyArtType, { src: string; alt: string; border: string }>> = {
   boss_warden: {
-    src: '/src/assets/images/boss_obsidian_warden_1795024246711.jpg',
+    src: assetUrl('src/assets/images/boss_obsidian_warden_1795024246711.jpg'),
     alt: '黑曜守望者',
     border: 'border-amber-500/45',
   },
   ember_zealot: {
-    src: '/src/assets/images/enemy_ember_zealot_art_1795028067223.jpg',
+    src: assetUrl('src/assets/images/enemy_ember_zealot_art_1795028067223.jpg'),
     alt: '深红狂信徒',
     border: 'border-rose-500/35',
   },
   cinderhorn_brute: {
-    src: '/src/assets/images/enemy_cinderhorn_brute_art_1795028055930.jpg',
+    src: assetUrl('src/assets/images/enemy_cinderhorn_brute_art_1795028055930.jpg'),
     alt: '烬角蛮兽',
     border: 'border-rose-500/50',
   },
   caustic_ooze: {
-    src: '/src/assets/images/enemy_caustic_ooze_art_1795028136299.jpg',
+    src: assetUrl('src/assets/images/enemy_caustic_ooze_art_1795028136299.jpg'),
     alt: '腐蚀软泥',
     border: 'border-emerald-500/35',
   },
   cinder_burrower: {
-    src: '/src/assets/images/enemy_cinder_burrower_art_1795028136495.jpg',
+    src: assetUrl('src/assets/images/enemy_cinder_burrower_art_1795028136495.jpg'),
     alt: '余烬掘地虫',
     border: 'border-slate-500/45',
   },
   boneknight: {
-    src: '/src/assets/images/enemy_bone_knight_art_1795028151084.jpg',
+    src: assetUrl('src/assets/images/enemy_bone_knight_art_1795028151084.jpg'),
     alt: '骸骨护卫',
     border: 'border-slate-400/40',
   },
   slumbering_gargoyle: {
-    src: '/src/assets/images/enemy_slumbering_gargoyle_art_1795028144807.jpg',
+    src: assetUrl('src/assets/images/enemy_slumbering_gargoyle_art_1795028144807.jpg'),
     alt: '沉睡石像鬼',
     border: 'border-violet-500/45',
   },

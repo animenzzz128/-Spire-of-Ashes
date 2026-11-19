@@ -17,6 +17,7 @@ import {
 } from '../game/engine';
 import { Locale, UI_COPY, tCard } from '../game/i18n';
 import { CardInstance, EnemyInstance, RunState } from '../game/types';
+import { assetUrl } from '../game/assets';
 
 interface CardViewProps {
   card: CardInstance;
@@ -37,12 +38,12 @@ interface CardViewProps {
 }
 
 const CARD_ART_MAP: Record<string, string> = {
-  crimson_slash: '/src/assets/images/card_art_crimson_slash_1795034564128.jpg',
-  iron_bulwark: '/src/assets/images/card_art_iron_bulwark_1795034563806.jpg',
-  blood_fury: '/src/assets/images/card_art_blood_fury_1795034563391.jpg',
-  venom_strike: '/src/assets/images/card_art_venom_strike_1795034563360.jpg',
-  shadow_knife: '/src/assets/images/card_art_shadow_knife_1795034565706.jpg',
-  curse_burn: '/src/assets/images/card_art_curse_burn_1795034566156.jpg',
+  crimson_slash: assetUrl('src/assets/images/card_art_crimson_slash_1795034564128.jpg'),
+  iron_bulwark: assetUrl('src/assets/images/card_art_iron_bulwark_1795034563806.jpg'),
+  blood_fury: assetUrl('src/assets/images/card_art_blood_fury_1795034563391.jpg'),
+  venom_strike: assetUrl('src/assets/images/card_art_venom_strike_1795034563360.jpg'),
+  shadow_knife: assetUrl('src/assets/images/card_art_shadow_knife_1795034565706.jpg'),
+  curse_burn: assetUrl('src/assets/images/card_art_curse_burn_1795034566156.jpg'),
 };
 
 function getCardArtSrc(artKey: string, type: string): string {
