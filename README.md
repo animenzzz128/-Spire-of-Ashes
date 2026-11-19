@@ -29,7 +29,7 @@ Ascend the 15-floor Obsidian Spire. Read enemy intents with clarity, allocate li
   - Floors 1–7: Lower Crypt Stone Hall
   - Floors 8–14: Obsidian Forge Sanctum
   - Floor 15: Summit Throne of the Obsidian Warden
-  - Dedicated 3:4 character standees (立绘) and custom boss/elite/enemy illustrations.
+  - Dedicated 3:4 character standees (立绘) and AI-generated boss/elite/enemy illustrations (see [Art & AI](#art--ai--美术与-ai-说明)).
 - **Interactive New-Player Onboarding | 完整新手引导**
   - Step-by-step interactive sandbox tutorial covering Enemy Intents, Block math, Vulnerable combos, Poison penetration, and Deck thinning.
 - **Detailed Damage & Combat Telemetry | 局内伤害与战斗统计**
@@ -59,7 +59,18 @@ Ascend the 15-floor Obsidian Spire. Read enemy intents with clarity, allocate li
 
 ---
 
+## Art & AI | 美术与 AI 说明
+
+- **Art:** the hero, enemy, card and scene images in `src/assets/images` were generated with Google's image models in Google AI Studio. The files carry Google's C2PA "AI-generated" credentials. No game code calls an AI model at runtime.
+- **Code:** the first build was generated in Google AI Studio. Later work (bug fixes, rebalancing with the simulator, original names, the Ember system, saves, accessibility, phone layout, CI) was done with Claude Code (Claude Opus 5.5) as an AI pair programmer, under Jacky Yao's direction.
+
+美术图片由 Google AI Studio 生成（文件内含 C2PA"AI 生成"凭证）；初版代码由 AI Studio 生成，之后的开发由 Jacky Yao 主导、Claude Code 辅助完成。
+
+---
+
 ## Local Development | 本地运行
+
+Working on the game, by hand or with an agent: start with [AGENTS.md](AGENTS.md) (commands, how PRs land, the playtest rule, feature map).
 
 ```bash
 npm install

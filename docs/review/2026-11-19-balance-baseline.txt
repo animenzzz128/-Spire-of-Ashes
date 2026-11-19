@@ -1,0 +1,160 @@
+# Balance simulator output for the first evaluation, at 16dcb7d (AI Studio first build), before the P1 rebalance.
+# Kept as a baseline to compare later `npm run sim` runs against. Saved from the session's scratch folder on 2026-11-19.
+
+=== Deterministic checks ===
+Battle Trance: hand 6 -> 5 (expected 8 if it drew 3); draw pile 5 -> 5; noDrawThisTurn=true
+forge_random: 300 trials with shuffled decks — upgraded indices always [0,1]: true
+bone_knight intent "破甲诅咒 · 脆弱 & 易伤" (vuln 1, weak 0, frail 2) -> at start of player's next turn: vulnerable=0, weak=0, frail=1; next enemy intent: 盾击突进 dmg 9x1
+lagavulin intent "灵魂虹吸 · 虚弱 & 脆弱" (vuln 0, weak 1, frail 1) -> at start of player's next turn: vulnerable=0, weak=0, frail=0; next enemy intent: 巨爪横扫 dmg 18x1
+acid_slime intent "腐蚀舔舐 · 虚弱 2" (vuln 0, weak 2, frail 0) -> at start of player's next turn: vulnerable=0, weak=1, frail=0; next enemy intent: 酸液重压 dmg 10x1
+gremlin_nob intent "碎颅重锤 · 易伤 2" (vuln 2, weak 0, frail 0) -> at start of player's next turn: vulnerable=1, weak=0, frail=0; next enemy intent: 狂暴冲撞 dmg 16x1
+
+=== baseline: ironwarden A0, n=2000 ===
+win rate: 3.0%  | avg elites taken: 0.65
+death floor (share of all runs): F1-4 0.4% | F5-7 49.6% | F8-10 13.4% | F11-14 11.2% | F15 boss 22.4%
+killer type (share of deaths): monster 58.8% | elite 18.1% | boss 23.1%
+killer encounter (share of deaths): monster:cultist+jaw_worm 28.9% | boss:obsidian_warden 23.1% | monster:bone_knight+looter 16.1% | elite:gremlin_nob 11.4% | monster:acid_slime+looter 8.5% | elite:lagavulin 6.1% | monster:bone_knight 4.9% | elite:sentry+sentry 0.6% | monster:cultist 0.4% | monster:jaw_worm 0.1%
+reached boss: 25.4% | avg HP entering boss: 55.6 / 80.0 | boss win rate given reached: 11.8%
+boss fight turns: all 8.8 | wins 8.8 | losses 8.8
+fights hitting 60-turn cap: 0 of 11251 fights (0 runs ended by cap)
+HP lost per encounter (mean | n | loss rate | mean turns):
+  boss:obsidian_warden                  58.3 |   508 |  88.2% | 8.8
+  elite:gremlin_nob                     43.9 |   419 |  52.7% | 4.5
+  elite:lagavulin                       35.5 |   434 |  27.2% | 9.6
+  elite:sentry+sentry                   10.3 |   445 |   2.7% | 6.2
+  monster:acid_slime                     4.2 |  1860 |   0.0% | 5.0
+  monster:acid_slime+looter             30.4 |   895 |  18.3% | 6.9
+  monster:bone_knight                   19.9 |   928 |  10.3% | 5.3
+  monster:bone_knight+looter            38.1 |   934 |  33.4% | 6.8
+  monster:cultist                       14.6 |  1946 |   0.4% | 5.3
+  monster:cultist+jaw_worm              42.7 |   982 |  57.1% | 6.3
+  monster:jaw_worm                       9.5 |  1900 |   0.1% | 5.3
+
+=== baseline: shadowweaver A0, n=2000 ===
+win rate: 16.3%  | avg elites taken: 0.77
+death floor (share of all runs): F1-4 0.1% | F5-7 30.7% | F8-10 9.2% | F11-14 9.9% | F15 boss 33.9%
+killer type (share of deaths): boss 40.5% | monster 43.3% | elite 16.2%
+killer encounter (share of deaths): boss:obsidian_warden 40.5% | monster:cultist+jaw_worm 25.3% | elite:gremlin_nob 11.5% | monster:bone_knight+looter 9.8% | monster:acid_slime+looter 4.7% | elite:lagavulin 4.3% | monster:bone_knight 3.5% | elite:sentry+sentry 0.4% | monster:cultist 0.1%
+reached boss: 50.1% | avg HP entering boss: 47.9 / 70.0 | boss win rate given reached: 32.4%
+boss fight turns: all 10.7 | wins 10.4 | losses 10.8
+fights hitting 60-turn cap: 9 of 13179 fights (9 runs ended by cap)
+HP lost per encounter (mean | n | loss rate | mean turns):
+  boss:obsidian_warden                  44.9 |  1003 |  67.6% | 10.7
+  elite:gremlin_nob                     31.0 |   513 |  37.6% | 4.6
+  elite:lagavulin                       15.2 |   539 |  13.4% | 12.3
+  elite:sentry+sentry                    3.1 |   497 |   1.2% | 5.5
+  monster:acid_slime                     1.0 |  1819 |   0.0% | 5.0
+  monster:acid_slime+looter             13.1 |  1257 |   6.3% | 6.7
+  monster:bone_knight                   10.6 |  1238 |   4.8% | 5.3
+  monster:bone_knight+looter            20.8 |  1222 |  13.4% | 7.3
+  monster:cultist                        4.1 |  1924 |   0.1% | 4.9
+  monster:cultist+jaw_worm              26.3 |  1296 |  32.6% | 6.7
+  monster:jaw_worm                       3.2 |  1871 |   0.0% | 5.8
+
+=== SENSITIVITY aggressive-block policy: ironwarden A0, n=2000 ===
+win rate: 2.1%  | avg elites taken: 0.63
+death floor (share of all runs): F1-4 0.1% | F5-7 46.9% | F8-10 13.6% | F11-14 11.3% | F15 boss 26.1%
+killer type (share of deaths): monster 54.9% | boss 26.6% | elite 18.4%
+killer encounter (share of deaths): boss:obsidian_warden 26.6% | monster:cultist+jaw_worm 24.8% | monster:bone_knight+looter 16.2% | elite:gremlin_nob 10.9% | monster:acid_slime+looter 9.0% | elite:lagavulin 6.6% | monster:bone_knight 4.8% | elite:sentry+sentry 0.9% | monster:cultist 0.1%
+reached boss: 28.2% | avg HP entering boss: 54.1 / 80.0 | boss win rate given reached: 7.6%
+boss fight turns: all 8.3 | wins 8.6 | losses 8.3
+fights hitting 60-turn cap: 1 of 11397 fights (1 runs ended by cap)
+HP lost per encounter (mean | n | loss rate | mean turns):
+  boss:obsidian_warden                  57.5 |   564 |  92.4% | 8.3
+  elite:gremlin_nob                     42.5 |   414 |  51.7% | 4.5
+  elite:lagavulin                       34.8 |   437 |  29.7% | 9.4
+  elite:sentry+sentry                   11.7 |   407 |   4.2% | 5.5
+  monster:acid_slime                     9.8 |  1829 |   0.0% | 3.7
+  monster:acid_slime+looter             30.2 |   952 |  18.6% | 6.4
+  monster:bone_knight                   21.8 |  1059 |   8.9% | 4.9
+  monster:bone_knight+looter            37.2 |   965 |  32.8% | 6.4
+  monster:cultist                       10.2 |  1911 |   0.1% | 3.5
+  monster:cultist+jaw_worm              38.5 |   940 |  51.7% | 6.0
+  monster:jaw_worm                      11.9 |  1919 |   0.0% | 3.9
+
+=== SENSITIVITY aggressive-block policy: shadowweaver A0, n=2000 ===
+win rate: 13.7%  | avg elites taken: 0.78
+death floor (share of all runs): F1-4 0.0% | F5-7 30.1% | F8-10 11.7% | F11-14 9.3% | F15 boss 35.2%
+killer type (share of deaths): elite 16.0% | boss 40.8% | monster 43.2%
+killer encounter (share of deaths): boss:obsidian_warden 40.8% | monster:cultist+jaw_worm 23.4% | monster:bone_knight+looter 11.4% | elite:gremlin_nob 10.2% | elite:lagavulin 5.7% | monster:acid_slime+looter 5.3% | monster:bone_knight 3.1% | elite:sentry+sentry 0.1%
+reached boss: 48.9% | avg HP entering boss: 48.0 / 70.0 | boss win rate given reached: 27.9%
+boss fight turns: all 10.5 | wins 10.5 | losses 10.5
+fights hitting 60-turn cap: 20 of 13059 fights (20 runs ended by cap)
+HP lost per encounter (mean | n | loss rate | mean turns):
+  boss:obsidian_warden                  45.9 |   977 |  72.1% | 10.5
+  elite:gremlin_nob                     30.5 |   502 |  35.3% | 4.5
+  elite:lagavulin                       15.5 |   579 |  16.9% | 13.7
+  elite:sentry+sentry                    4.3 |   485 |   0.4% | 5.2
+  monster:acid_slime                     4.1 |  1847 |   0.0% | 4.3
+  monster:acid_slime+looter             13.2 |  1217 |   7.6% | 6.2
+  monster:bone_knight                   12.9 |  1193 |   4.4% | 4.9
+  monster:bone_knight+looter            20.5 |  1217 |  16.2% | 6.8
+  monster:cultist                        4.8 |  1970 |   0.0% | 3.8
+  monster:cultist+jaw_worm              23.3 |  1243 |  32.5% | 6.3
+  monster:jaw_worm                       4.2 |  1829 |   0.0% | 5.0
+
+=== ascension: ironwarden A2, n=2000 ===
+win rate: 0.8%  | avg elites taken: 0.61
+death floor (share of all runs): F1-4 0.3% | F5-7 50.3% | F8-10 15.5% | F11-14 10.6% | F15 boss 22.4%
+killer type (share of deaths): boss 22.6% | monster 54.9% | elite 22.4%
+killer encounter (share of deaths): monster:cultist+jaw_worm 26.2% | boss:obsidian_warden 22.6% | monster:bone_knight+looter 15.2% | elite:gremlin_nob 15.0% | monster:acid_slime+looter 9.5% | elite:lagavulin 7.1% | monster:bone_knight 3.8% | elite:sentry+sentry 0.4% | monster:cultist 0.3% | monster:acid_slime 0.1%
+reached boss: 23.3% | avg HP entering boss: 54.5 / 80.0 | boss win rate given reached: 3.6%
+boss fight turns: all 8.2 | wins 9.4 | losses 8.1
+fights hitting 60-turn cap: 0 of 10972 fights (0 runs ended by cap)
+HP lost per encounter (mean | n | loss rate | mean turns):
+  boss:obsidian_warden                  58.4 |   466 |  96.4% | 8.2
+  elite:gremlin_nob                     50.8 |   446 |  66.8% | 4.8
+  elite:lagavulin                       37.1 |   397 |  35.3% | 10.9
+  elite:sentry+sentry                   12.4 |   379 |   1.8% | 7.3
+  monster:acid_slime                     4.3 |  1894 |   0.1% | 5.1
+  monster:acid_slime+looter             31.5 |   889 |  21.1% | 7.0
+  monster:bone_knight                   20.1 |   943 |   8.0% | 5.4
+  monster:bone_knight+looter            37.7 |   881 |  34.2% | 6.7
+  monster:cultist                       14.5 |  1859 |   0.3% | 5.3
+  monster:cultist+jaw_worm              42.8 |   917 |  56.6% | 6.4
+  monster:jaw_worm                       9.5 |  1901 |   0.0% | 5.3
+
+=== ascension: shadowweaver A2, n=2000 ===
+win rate: 7.6%  | avg elites taken: 0.76
+death floor (share of all runs): F1-4 0.0% | F5-7 34.0% | F8-10 11.9% | F11-14 10.1% | F15 boss 36.5%
+killer type (share of deaths): boss 39.4% | monster 40.3% | elite 20.3%
+killer encounter (share of deaths): boss:obsidian_warden 39.4% | monster:cultist+jaw_worm 23.8% | elite:gremlin_nob 15.4% | monster:bone_knight+looter 8.8% | monster:acid_slime+looter 4.9% | elite:lagavulin 4.7% | monster:bone_knight 2.8% | elite:sentry+sentry 0.2%
+reached boss: 44.0% | avg HP entering boss: 47.7 / 70.0 | boss win rate given reached: 17.3%
+boss fight turns: all 10.6 | wins 10.6 | losses 10.7
+fights hitting 60-turn cap: 13 of 12747 fights (13 runs ended by cap)
+HP lost per encounter (mean | n | loss rate | mean turns):
+  boss:obsidian_warden                  48.5 |   881 |  82.7% | 10.6
+  elite:gremlin_nob                     38.6 |   523 |  54.5% | 5.0
+  elite:lagavulin                       18.8 |   516 |  16.7% | 13.9
+  elite:sentry+sentry                    4.4 |   488 |   0.8% | 6.7
+  monster:acid_slime                     1.0 |  1880 |   0.0% | 5.0
+  monster:acid_slime+looter             13.5 |  1210 |   7.4% | 6.9
+  monster:bone_knight                   10.8 |  1188 |   4.4% | 5.4
+  monster:bone_knight+looter            21.7 |  1154 |  14.0% | 7.5
+  monster:cultist                        4.0 |  1940 |   0.0% | 4.9
+  monster:cultist+jaw_worm              27.7 |  1188 |  37.0% | 6.8
+  monster:jaw_worm                       3.4 |  1779 |   0.0% | 5.9
+
+=== COUNTERFACTUAL battle_trance draws: ironwarden A0, n=2000 ===
+win rate: 3.1%  | avg elites taken: 0.62
+death floor (share of all runs): F1-4 0.8% | F5-7 47.4% | F8-10 13.9% | F11-14 10.0% | F15 boss 24.8%
+killer type (share of deaths): monster 57.7% | elite 16.7% | boss 25.6%
+killer encounter (share of deaths): monster:cultist+jaw_worm 28.4% | boss:obsidian_warden 25.6% | monster:bone_knight+looter 16.6% | elite:gremlin_nob 10.3% | monster:acid_slime+looter 8.7% | elite:lagavulin 6.0% | monster:bone_knight 3.4% | monster:cultist 0.7% | elite:sentry+sentry 0.4% | monster:acid_slime 0.1%
+reached boss: 27.9% | avg HP entering boss: 54.9 / 80.0 | boss win rate given reached: 11.1%
+boss fight turns: all 8.8 | wins 8.8 | losses 8.8
+fights hitting 60-turn cap: 2 of 11304 fights (2 runs ended by cap)
+HP lost per encounter (mean | n | loss rate | mean turns):
+  boss:obsidian_warden                  56.8 |   558 |  88.9% | 8.8
+  elite:gremlin_nob                     45.7 |   368 |  54.3% | 4.7
+  elite:lagavulin                       33.6 |   439 |  26.4% | 10.4
+  elite:sentry+sentry                    9.6 |   430 |   1.6% | 6.2
+  monster:acid_slime                     4.1 |  1845 |   0.1% | 5.0
+  monster:acid_slime+looter             30.0 |   990 |  17.0% | 7.1
+  monster:bone_knight                   18.8 |   974 |   6.7% | 5.3
+  monster:bone_knight+looter            37.7 |   965 |  33.3% | 6.9
+  monster:cultist                       14.9 |  1906 |   0.7% | 5.4
+  monster:cultist+jaw_worm              41.9 |   985 |  55.8% | 6.4
+  monster:jaw_worm                       8.9 |  1844 |   0.0% | 5.3
+(counterfactual) runs whose final deck had Battle Trance: 21.3%
+
+elapsed 10.489s
