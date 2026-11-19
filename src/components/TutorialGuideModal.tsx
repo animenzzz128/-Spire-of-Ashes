@@ -13,7 +13,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { BALANCE } from '../game/balance';
-import { Locale } from '../game/i18n';
+import { Locale, UI_COPY } from '../game/i18n';
+import { useDialog } from './useDialog';
 
 interface TutorialGuideModalProps {
   locale: Locale;
@@ -26,6 +27,7 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
   onClose,
   onComplete,
 }) => {
+  const dialogRef = useDialog<HTMLDivElement>(onClose);
   const [step, setStep] = useState(0);
 
   // Interactive Step 2 state: Block defense drill
@@ -443,7 +445,7 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl border border-white/15 bg-[#12161f] shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" tabIndex={-1} aria-label={UI_COPY[locale].menuTutorial} className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl border border-white/15 bg-[#12161f] shadow-2xl outline-none">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
           <div className="flex items-center gap-2.5">

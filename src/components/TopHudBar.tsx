@@ -74,7 +74,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
     <header className="relative z-40 border-b border-white/10 bg-[#0d1118]/95 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1440px] flex-wrap xl:flex-nowrap items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
         {/* Zone 1: Hero & Vital Stats */}
-        <div className="flex shrink-0 flex-wrap items-center gap-3 sm:gap-5">
+        <div className="flex min-w-0 flex-wrap items-center gap-3 sm:gap-5 xl:shrink-0">
           <div className="flex items-center gap-2">
             <span className="font-display text-base font-bold tracking-wide text-amber-400 whitespace-nowrap">
               {heroName}
@@ -186,42 +186,47 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
         </div>
 
         {/* Zone 3: Actions */}
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2 xl:shrink-0">
           {state.phase !== 'MAP' && state.phase !== 'VICTORY' && state.phase !== 'DEFEAT' && (
             <button
               type="button"
               onClick={onToggleMapOverlay}
+              aria-label={copy.mapBtn}
               className="flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#161c26] px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:border-amber-400/50 hover:text-white transition-colors whitespace-nowrap cursor-pointer"
             >
               <MapIcon className="h-3.5 w-3.5 text-amber-400" />
-              <span>{copy.mapBtn}</span>
+              <span className="hidden sm:inline">{copy.mapBtn}</span>
             </button>
           )}
           <button
             type="button"
             onClick={onOpenDeck}
+            aria-label={`${copy.deckBtn} (${state.deck.length})`}
             className="flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#161c26] px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:border-sky-400/50 hover:text-white transition-colors whitespace-nowrap cursor-pointer"
           >
             <Layers className="h-3.5 w-3.5 text-sky-400" />
-            <span>
+            <span className="hidden sm:inline">
               {copy.deckBtn} (<span className="font-mono-num">{state.deck.length}</span>)
             </span>
+            <span className="font-mono-num sm:hidden">{state.deck.length}</span>
           </button>
           <button
             type="button"
             onClick={onOpenStats}
+            aria-label={copy.statsBtn}
             className="flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#161c26] px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:border-emerald-400/50 hover:text-white transition-colors whitespace-nowrap cursor-pointer"
           >
             <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />
-            <span>{copy.statsBtn}</span>
+            <span className="hidden sm:inline">{copy.statsBtn}</span>
           </button>
           <button
             type="button"
             onClick={onOpenGlossary}
+            aria-label={copy.glossary}
             className="flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#161c26] px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:border-amber-400/50 hover:text-white transition-colors whitespace-nowrap cursor-pointer"
           >
             <BookOpen className="h-3.5 w-3.5 text-amber-400" />
-            <span>{copy.glossary}</span>
+            <span className="hidden sm:inline">{copy.glossary}</span>
           </button>
           <button
             type="button"
@@ -252,10 +257,11 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
             <button
               type="button"
               onClick={() => setConfirmAbandon(true)}
+              aria-label={copy.restartBtn}
               className="flex items-center gap-1 rounded-lg border border-white/12 bg-[#161c26] px-2.5 py-1.5 text-xs text-slate-400 hover:border-rose-500/50 hover:text-rose-300 transition-colors whitespace-nowrap cursor-pointer"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              <span>{copy.restartBtn}</span>
+              <span className="hidden sm:inline">{copy.restartBtn}</span>
             </button>
           ) : (
             <div className="flex items-center gap-1">

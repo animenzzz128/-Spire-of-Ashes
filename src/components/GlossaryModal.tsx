@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDialog } from './useDialog';
 import {
   BookOpen,
   Bomb,
@@ -21,7 +22,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { CARD_DEFS, createCardInstance } from '../game/cards';
+import { CARD_DEFS } from '../game/cards';
 import { Locale, UI_COPY } from '../game/i18n';
 import { CardView } from './CardView';
 
@@ -453,6 +454,7 @@ const KEYWORDS_EN = [
 ];
 
 export const GlossaryModal: React.FC<GlossaryModalProps> = ({ locale, onClose }) => {
+  const dialogRef = useDialog<HTMLDivElement>(onClose);
   const [tab, setTab] = useState<'manual' | 'status' | 'keywords' | 'ironwarden' | 'shadowweaver' | 'neutral'>('manual');
   const zh = locale === 'zh';
   const keywords = zh ? KEYWORDS_ZH : KEYWORDS_EN;
@@ -503,7 +505,7 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({ locale, onClose })
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/82 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl border border-white/15 bg-[#12161f] shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" tabIndex={-1} aria-label={UI_COPY[locale].glossaryFull} className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl border border-white/15 bg-[#12161f] shadow-2xl outline-none">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-6 py-4">
           <div className="flex items-center gap-2.5">
             <BookOpen className="h-5 w-5 text-amber-400" aria-hidden={true} />
@@ -655,7 +657,7 @@ export const GlossaryModal: React.FC<GlossaryModalProps> = ({ locale, onClose })
               {cards.map((def) => (
                 <CardView
                   key={def.id}
-                  card={createCardInstance(def.id, false)}
+                  card={{ uid: `glossary_${def.id}`, defId: def.id, upgraded: false }}
                   locale={locale}
                   compact
                 />

@@ -1,5 +1,6 @@
 import React from 'react';
 import { BarChart3, Flame, Heart, Shield, Skull, Swords, X } from 'lucide-react';
+import { useDialog } from './useDialog';
 import { Locale, UI_COPY, tCard } from '../game/i18n';
 import { RunState } from '../game/types';
 
@@ -285,11 +286,12 @@ export const DamageStatsModal: React.FC<DamageStatsModalProps> = ({
   locale,
   onClose,
 }) => {
+  const dialogRef = useDialog<HTMLDivElement>(onClose);
   const copy = UI_COPY[locale];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/82 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[88vh] w-full max-w-4xl flex-col rounded-2xl border border-white/15 bg-[#12161f] shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" tabIndex={-1} aria-label={copy.statsTitle} className="flex max-h-[88vh] w-full max-w-4xl flex-col rounded-2xl border border-white/15 bg-[#12161f] shadow-2xl outline-none">
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
           <div className="flex items-center gap-2.5">
             <BarChart3 className="h-5 w-5 text-amber-400" />

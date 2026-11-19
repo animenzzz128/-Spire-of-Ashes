@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Globe, PlayCircle, Settings, Trash2, Volume2, VolumeX, X } from 'lucide-react';
+import { useDialog } from './useDialog';
 import { Locale, UI_COPY } from '../game/i18n';
 
 interface SettingsModalProps {
@@ -23,12 +24,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClearSavedRun,
   onClose,
 }) => {
+  const dialogRef = useDialog<HTMLDivElement>(onClose);
   const copy = UI_COPY[locale];
   const [clearedMsg, setClearedMsg] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/82 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-white/15 bg-[#12161f] shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" tabIndex={-1} aria-label={copy.settingsTitle} className="w-full max-w-lg rounded-2xl border border-white/15 bg-[#12161f] shadow-2xl outline-none">
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
           <div className="flex items-center gap-2.5">
             <Settings className="h-5 w-5 text-amber-400" />

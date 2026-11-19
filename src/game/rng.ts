@@ -13,6 +13,11 @@ export function seedRng(seed: number): void {
   state = seed >>> 0;
 }
 
+/** Current generator state, saved with the run so a resume continues the same sequence. */
+export function getRngState(): number {
+  return state;
+}
+
 /** Uniform float in [0, 1), like Math.random. */
 export function rng(): number {
   state = (state + 0x6d2b79f5) >>> 0;

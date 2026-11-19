@@ -17,6 +17,7 @@ import {
   RARE_PITY_CAP,
   RARE_PITY_STEP,
   rollCardChoices,
+  setUidCounter,
 } from './cards';
 import {
   applyBossPhase2IfNeeded,
@@ -29,6 +30,7 @@ import {
 } from './combat';
 import {
   computeCardBlock,
+  conditionMet,
   computeHitDamage,
   newPlayInfo,
   runEffects,
@@ -65,6 +67,7 @@ export interface CombatActionResult {
 }
 
 export function createNewRun(heroId: HeroClassId, ascension = 0): RunState {
+  setUidCounter(0);
   const hero = HERO_CLASSES[heroId];
   const starterRelic = RELIC_DEFS[hero.starterRelicId];
   const map = generateSpireMap();
@@ -329,6 +332,31 @@ export function calculateCardDamagePreview(
     boosted: calc.perHit > calc.base,
     reduced: calc.perHit < calc.base,
   };
+}
+
+/**
+ * Total damage a card would deal to one target right now: every damage effect
+ * whose condition holds, every hit, with Temper, Strength, Weak and Vulnerable.
+ * Returns null for cards that deal no damage. (Ignores the target's Block.)
+ */
+export function calculateCardTotalDamage(
+  card: CardInstance,
+  state: RunState,
+  target: EnemyInstance
+): number | null {
+  const def = CARD_DEFS[card.defId];
+  const combat = state.combat;
+  if (!def || !combat) return null;
+  const temper = temperPerHitFor(def, card.upgraded, combat);
+  let total = 0;
+  let any = false;
+  for (const e of getCardEffects(def)) {
+    if (e.op !== 'damage' || !conditionMet(combat, e.when)) continue;
+    any = true;
+    const calc = computeHitDamage(e, card.upgraded, combat, target, temper);
+    total += calc.perHit * (e.xHits ? combat.energy : calc.hits);
+  }
+  return any ? total : null;
 }
 
 export function calculateCardBlockPreview(

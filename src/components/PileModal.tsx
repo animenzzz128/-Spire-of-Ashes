@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowRight, X } from 'lucide-react';
+import { useDialog } from './useDialog';
 import { Locale, UI_COPY } from '../game/i18n';
 import { CardInstance } from '../game/types';
 import { CardView } from './CardView';
@@ -25,12 +26,13 @@ export const PileModal: React.FC<PileModalProps> = ({
   onSelectCard,
   onClose,
 }) => {
+  const dialogRef = useDialog<HTMLDivElement>(onClose);
   const [previewCard, setPreviewCard] = useState<CardInstance | null>(null);
   const zh = locale === 'zh';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl border border-white/15 bg-[#12161f] shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" tabIndex={-1} aria-label={title} className="flex max-h-[88vh] w-full max-w-5xl flex-col rounded-2xl border border-white/15 bg-[#12161f] shadow-2xl outline-none">
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
           <div>
             <h3 className="font-display text-xl font-bold text-slate-100">{title}</h3>
