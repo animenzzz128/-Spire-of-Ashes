@@ -1048,7 +1048,7 @@ export function rollCardChoices(
 
   while (result.length < count && guard < 100) {
     guard += 1;
-    const roll = rng();
+    const roll = rng('reward');
     let targetRarity: 'common' | 'uncommon' | 'rare' = 'common';
     if (roll < rareChance) {
       targetRarity = 'rare';
@@ -1059,10 +1059,10 @@ export function rollCardChoices(
     const fallback = pool.filter((c) => !pickedIds.has(c.id));
     const list = candidates.length > 0 ? candidates : fallback;
     if (list.length === 0) break;
-    const chosen = list[Math.floor(rng() * list.length)];
+    const chosen = list[Math.floor(rng('reward') * list.length)];
     pickedIds.add(chosen.id);
     // Small chance of a pre-upgraded card
-    const preUpgraded = rng() < (eliteBonus ? 0.12 : 0.05);
+    const preUpgraded = rng('reward') < (eliteBonus ? 0.12 : 0.05);
     result.push(createCardInstance(chosen.id, preUpgraded));
   }
   return result;
@@ -1148,4 +1148,60 @@ export function getPrimaryDamageEffect(def: CardDef): Extract<CardEffect, { op: 
 /** First block effect of a card, if any. */
 export function getPrimaryBlockEffect(def: CardDef): Extract<CardEffect, { op: 'block' }> | undefined {
   return getCardEffects(def).find((e): e is Extract<CardEffect, { op: 'block' }> => e.op === 'block');
+}
+
+// ---------------------------------------------------------------------------
+// Card data validation (run by npm test). Catches mistakes that would otherwise
+// fail silently: a mistyped id, an enemy effect with no target, an effect list
+// that quietly overrides flat fields, a missing upgrade text.
+// ---------------------------------------------------------------------------
+
+const FLAT_EFFECT_FIELDS: (keyof CardDef)[] = [
+  'damage', 'upgradedDamage', 'hits', 'upgradedHits', 'block', 'upgradedBlock', 'draw', 'upgradedDraw',
+  'gainEnergy', 'upgradedGainEnergy', 'loseHp', 'strengthMult', 'upgradedStrengthMult',
+  'applyVulnerable', 'upgradedApplyVulnerable', 'applyWeak', 'upgradedApplyWeak', 'applyPoison',
+  'upgradedApplyPoison', 'doublePoison', 'upgradedDoublePoison', 'gainStrength', 'upgradedGainStrength',
+  'gainDexterity', 'upgradedGainDexterity', 'gainIronhide', 'upgradedGainIronhide', 'gainArtifact',
+  'upgradedGainArtifact', 'gainShade', 'addKnives', 'upgradedAddKnives', 'discardCount', 'blockAsDamage',
+  'lifesteal', 'upgradeAllInCombat', 'doubleNextTurn', 'rotburst', 'infernalAvatar', 'upgradedInfernalAvatar',
+  'miasma', 'upgradedMiasma', 'venomEdge', 'bastion', 'noMoreDraw',
+];
+
+/** Effects that act on enemies need the card to target them (or their own `to`). */
+const ENEMY_OPS = new Set(['damage', 'debuff', 'multiplyPoison', 'markRotburst', 'removeBlock']);
+
+export function validateCardDefs(defs: Record<string, CardDef>): string[] {
+  const problems: string[] = [];
+  for (const [key, def] of Object.entries(defs)) {
+    const at = (msg: string) => problems.push(`${key}: ${msg}`);
+    if (def.id !== key) at(`id "${def.id}" does not match its key`);
+    if (!def.description?.trim()) at('empty description');
+    if (!def.artKey) at('missing artKey');
+    if (def.effects) {
+      const mixed = FLAT_EFFECT_FIELDS.filter((f) => def[f] !== undefined);
+      if (mixed.length) at(`has an effect list and flat fields (${mixed.join(', ')}); the flat fields are ignored`);
+    }
+    const lists: [string, CardEffect[]][] = [['effects', getCardEffects(def)]];
+    if (def.echo) lists.push(['echo', def.echo]);
+    let upgrades = def.upgradedCost !== undefined || def.upgradedExhaust !== undefined;
+    for (const [where, list] of lists) {
+      list.forEach((e, i) => {
+        const here = `${where}[${i}] ${e.op}`;
+        if ('up' in e && e.up !== undefined) upgrades = true;
+        if (ENEMY_OPS.has(e.op)) {
+          const to = 'to' in e ? e.to : undefined;
+          // Echo has no target: its enemy effects must say to: 'all' or 'random'.
+          const targeted = where === 'echo' ? false : def.target === 'enemy' || def.target === 'all_enemies';
+          if (!to && !targeted) at(`${here} affects enemies but the card has no enemy target`);
+        }
+        if (e.op === 'addCard' && !defs[e.card]) at(`${here} adds unknown card "${e.card}"`);
+        if ((e.op === 'choose' || e.op === 'discard') && e.n <= 0) at(`${here} chooses ${e.n} cards`);
+        if (e.op === 'damage' && e.xHits && def.cost !== -1) at(`${here} uses X hits on a card that is not X cost`);
+      });
+    }
+    if (upgrades && !def.upgradedDescription && def.type !== 'status' && def.type !== 'curse') {
+      at('changes when upgraded but has no upgradedDescription');
+    }
+  }
+  return problems;
 }

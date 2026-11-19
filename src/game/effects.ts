@@ -1,16 +1,22 @@
 // Card effect interpreter. Every card (and every Echo) runs through runEffects,
 // whether its effect list was written by hand or compiled from flat fields.
 import { BALANCE } from './balance';
-import { createCardInstance, effVal, getCardEffects } from './cards';
-import { CombatCtx } from './combat';
+import { CARD_DEFS, createCardInstance, effVal, getCardEffects } from './cards';
+import type { CombatCtx } from './combat';
+import { runHooks } from './hooks';
+import { rng } from './rng';
 import {
   CardDef,
   CardEffect,
+  CardFilter,
   CardInstance,
+  ChoicePile,
   CombatState,
   EffectCondition,
+  EffectPer,
   EffectScope,
   EnemyInstance,
+  PendingChoice,
 } from './types';
 
 type DamageEffect = Extract<CardEffect, { op: 'damage' }>;
@@ -28,8 +34,13 @@ export interface PlayInfo {
   dealt: number; // HP damage dealt by this card's attacks
   lifesteal: number;
   playerBlocked: boolean;
-  pendingDiscard: number;
   temperPerHit: number;
+  /** Set when a choose step paused the card; the engine stores it on the combat. */
+  pendingChoice?: PendingChoice;
+  /** Cards picked by this card's choice (available to the effects after it). */
+  chosen: CardInstance[];
+  /** Cards discarded by this card (discardHand). */
+  discarded: number;
 }
 
 export function newPlayInfo(card: CardInstance, def: CardDef, targetUid?: string, xValue = 0): PlayInfo {
@@ -44,15 +55,119 @@ export function newPlayInfo(card: CardInstance, def: CardDef, targetUid?: string
     dealt: 0,
     lifesteal: 0,
     playerBlocked: false,
-    pendingDiscard: 0,
     temperPerHit: 0,
+    chosen: [],
+    discarded: 0,
   };
 }
 
-export function conditionMet(combat: CombatState, cond?: EffectCondition): boolean {
+export function conditionMet(combat: CombatState, cond?: EffectCondition, chosen: CardInstance[] = []): boolean {
   if (!cond) return true;
   if ('emberAtLeast' in cond) return (combat.ember || 0) >= cond.emberAtLeast;
   if ('temperedThisTurn' in cond) return Boolean(combat.temperedThisTurn);
+  if ('chosenType' in cond) return chosen.some((c) => CARD_DEFS[c.defId]?.type === cond.chosenType);
+  return true;
+}
+
+/** n scaled by cards chosen / discarded earlier in the same card. */
+function perCount(per: EffectPer | undefined, play: PlayInfo): number {
+  if (per === 'chosen') return play.chosen.length;
+  if (per === 'discarded') return play.discarded;
+  return 1;
+}
+
+// ---------------------------------------------------------------------------
+// Choices
+// ---------------------------------------------------------------------------
+
+export function pileCards(combat: CombatState, pile: ChoicePile): CardInstance[] {
+  return combat[pile];
+}
+
+export function matchesFilter(card: CardInstance, filter?: CardFilter): boolean {
+  if (!filter) return true;
+  const def = CARD_DEFS[card.defId];
+  if (!def) return false;
+  if (filter.types && !filter.types.includes(def.type)) return false;
+  if (filter.notUpgraded && card.upgraded) return false;
+  return true;
+}
+
+/** Cards the player may pick for this choice right now (never the card that asked). */
+export function choiceOptions(
+  combat: CombatState,
+  pc: Pick<PendingChoice, 'from' | 'filter' | 'sourceCardUid'>
+): CardInstance[] {
+  return pileCards(combat, pc.from).filter((c) => c.uid !== pc.sourceCardUid && matchesFilter(c, pc.filter));
+}
+
+/** Discard one card from hand: discard pile, then its Echo, then discard triggers. */
+export function discardFromHand(ctx: CombatCtx, card: CardInstance): void {
+  ctx.combat.hand = ctx.combat.hand.filter((x) => x.uid !== card.uid);
+  ctx.combat.discardPile.push(card);
+  const def = CARD_DEFS[card.defId];
+  if (def?.echo) {
+    ctx.emit('player', { key: 'echo', ref: def.id }, 'ember');
+    runEffects(ctx, def.echo, newPlayInfo(card, def));
+  }
+  runHooks(ctx, 'discard', { card });
+}
+
+/** Apply a choice's action to one picked card (already removed from its pile, except for discards). */
+export function applyChoiceAction(ctx: CombatCtx, pc: PendingChoice, card: CardInstance): void {
+  switch (pc.action) {
+    case 'discard':
+      discardFromHand(ctx, card);
+      return;
+    case 'exhaust':
+      ctx.exhaustCard(card);
+      return;
+    case 'toHand':
+      ctx.addToHand(card);
+      return;
+    case 'toHandUpgraded':
+      ctx.addToHand({ ...card, upgraded: true });
+      return;
+    case 'upgrade':
+      ctx.combat[pc.from].push({ ...card, upgraded: true });
+      return;
+  }
+}
+
+/** Rebuild the card context after the player finished choosing. */
+export function playInfoForChoice(pc: PendingChoice): PlayInfo | null {
+  const def = CARD_DEFS[pc.sourceDefId];
+  if (!def) return null;
+  const play = newPlayInfo({ uid: pc.sourceCardUid, defId: pc.sourceDefId, upgraded: pc.upgraded }, def, pc.targetUid, pc.xValue || 0);
+  play.spent = pc.spent || 0;
+  play.chosen = pc.chosen;
+  return play;
+}
+
+/** Start a choice; returns false (and the card continues) when nothing can be picked. */
+function startChoice(ctx: CombatCtx, e: Extract<CardEffect, { op: 'choose' | 'discard' }>, play: PlayInfo, rest: CardEffect[]): boolean {
+  const spec =
+    e.op === 'discard'
+      ? { from: 'hand' as const, action: 'discard' as const, filter: undefined, optional: false, sourceCardUid: play.card.uid }
+      : { from: e.from, action: e.action, filter: e.filter, optional: e.optional, sourceCardUid: play.card.uid };
+  const options = choiceOptions(ctx.combat, spec);
+  const count = Math.min(effVal(e, play.upgraded), options.length);
+  if (count <= 0) return false;
+  play.pendingChoice = {
+    sourceCardUid: play.card.uid,
+    sourceDefId: play.def.id,
+    upgraded: play.upgraded,
+    targetUid: play.targetUid,
+    from: spec.from,
+    action: spec.action,
+    remaining: count,
+    ...(spec.filter ? { filter: spec.filter } : {}),
+    ...(spec.optional ? { optional: true } : {}),
+    chosen: [],
+    then: rest,
+    spent: play.spent,
+    xValue: play.xValue,
+  };
   return true;
 }
 
@@ -105,8 +220,12 @@ export function computeCardBlock(e: BlockEffect, upgraded: boolean, combat: Comb
   return { base, block: Math.max(0, blk) };
 }
 
-/** Living enemy indices an effect hits: the card's own target, or everyone with to: 'all'. */
+/** Living enemy indices an effect hits: the card's own target, everyone ('all') or one at random ('random'). */
 function targetsFor(ctx: CombatCtx, play: PlayInfo, to?: EffectScope): number[] {
+  if (to === 'random') {
+    const living = ctx.livingIndices();
+    return living.length ? [living[Math.floor(rng('combat') * living.length)]] : [];
+  }
   const scope = to === 'all' ? 'all_enemies' : play.def.target;
   if (scope === 'all_enemies') return ctx.livingIndices();
   if (scope === 'enemy') {
@@ -205,12 +324,10 @@ function runEffect(ctx: CombatCtx, e: CardEffect, play: PlayInfo): void {
       return;
     case 'addCard': {
       const n = effVal(e, up);
-      const count = e.perSpent ? Math.min(n, play.spent) : n;
+      const count = e.perSpent ? Math.min(n, play.spent) : e.per ? n * perCount(e.per, play) : n;
       const upgradedCopy = Boolean(e.upgradedCopies && up);
       for (let i = 0; i < count; i++) {
-        const copy = createCardInstance(e.card, upgradedCopy);
-        if (ctx.combat.hand.length < 10) ctx.combat.hand.push(copy);
-        else ctx.combat.discardPile.push(copy);
+        ctx.addToHand(createCardInstance(e.card, upgradedCopy));
       }
       return;
     }
@@ -246,7 +363,11 @@ function runEffect(ctx: CombatCtx, e: CardEffect, play: PlayInfo): void {
     case 'gainEmber': {
       const n = effVal(e, up);
       const distinctHit = new Set(play.hitEnemyUids).size;
-      const amount = e.perEnemyHit ? Math.min(e.max ?? Infinity, n * distinctHit) : n;
+      const amount = e.perEnemyHit
+        ? Math.min(e.max ?? Infinity, n * distinctHit)
+        : e.per
+        ? Math.min(e.max ?? Infinity, n * perCount(e.per, play))
+        : n;
       ctx.gainEmber(amount);
       return;
     }
@@ -255,15 +376,50 @@ function runEffect(ctx: CombatCtx, e: CardEffect, play: PlayInfo): void {
       play.spent += ctx.spendEmber(want);
       return;
     }
+    case 'discardHand': {
+      for (const card of [...ctx.combat.hand]) {
+        discardFromHand(ctx, card);
+        play.discarded += 1;
+      }
+      return;
+    }
+    case 'removeBlock': {
+      const n = effVal(e, up);
+      for (const idx of targetsFor(ctx, play, e.to)) {
+        const enemy = ctx.combat.enemies[idx];
+        const removed = Math.min(enemy.block, n);
+        if (removed > 0) {
+          ctx.combat.enemies[idx] = { ...enemy, block: enemy.block - removed };
+          ctx.emit(enemy.uid, { key: 'blockRemoved', n: removed }, 'debuff');
+        }
+      }
+      return;
+    }
+    case 'heal': {
+      const healed = ctx.heal(effVal(e, up));
+      if (healed > 0) ctx.emit('player', { key: 'heal', n: healed }, 'heal');
+      return;
+    }
     case 'discard':
-      play.pendingDiscard = effVal(e, up);
+    case 'choose':
+      // Handled by runEffects (they pause the card).
       return;
   }
 }
 
+/**
+ * Run a card's effects in order. A choose / discard step with something to pick
+ * pauses the card: the rest of the list is stored on play.pendingChoice and
+ * runs after the player picks (engine.chooseCard).
+ */
 export function runEffects(ctx: CombatCtx, effects: CardEffect[], play: PlayInfo): void {
-  for (const e of effects) {
-    if (!conditionMet(ctx.combat, e.when)) continue;
+  for (let i = 0; i < effects.length; i++) {
+    const e = effects[i];
+    if (!conditionMet(ctx.combat, e.when, play.chosen)) continue;
+    if (e.op === 'choose' || e.op === 'discard') {
+      if (startChoice(ctx, e, play, effects.slice(i + 1))) return;
+      continue;
+    }
     runEffect(ctx, e, play);
   }
 }

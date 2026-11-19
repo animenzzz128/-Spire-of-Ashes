@@ -8,6 +8,7 @@ import {
   getCardCost,
   getPrimaryDamageEffect,
   getStarterDeck,
+  validateCardDefs,
 } from '../src/game/cards';
 import {
   addPotionToSlot,
@@ -15,6 +16,7 @@ import {
   calculateCardTotalDamage,
   calculateCardDamagePreview,
   calculateEnemyAttackPreview,
+  chooseCard,
   createNewRun,
   discardPotionSlot,
   discardCard,
@@ -22,13 +24,18 @@ import {
   enterMapNode,
   playCard,
   resolveEnemyTurn,
+  shuffleArray,
+  skipChoice,
   startCombat,
   stokeCard,
   useClassAbility,
 } from '../src/game/engine';
 import { BALANCE } from '../src/game/balance';
-import { computeEnemyNextIntent } from '../src/game/enemies';
-import { seedRng } from '../src/game/rng';
+import { computeEnemyNextIntent, spawnEncounter } from '../src/game/enemies';
+import { rng, seedRng } from '../src/game/rng';
+import { HAND_CAP } from '../src/game/combat';
+import { choiceOptions } from '../src/game/effects';
+import { MAX_HOOK_DEPTH, registerHook, runHooks } from '../src/game/hooks';
 import { claimGold, restHeal, returnToMap } from '../src/game/rooms';
 import { LoadResult, parseSave, resumeRun, serializeRun } from '../src/game/save';
 import {
@@ -44,7 +51,7 @@ import {
   tRelic,
 } from '../src/game/i18n';
 import { resolveEventOption } from '../src/game/events';
-import { CombatMsg, CombatMsgKey, RunState } from '../src/game/types';
+import { CardDef, CombatMsg, CombatMsgKey, PendingChoice, RunState } from '../src/game/types';
 import { POTION_DEFS } from '../src/game/potions';
 import { RELIC_DEFS } from '../src/game/relics';
 import { generateSpireMap, TOTAL_FLOORS } from '../src/game/map';
@@ -185,9 +192,9 @@ function testCombatMechanicsAndStats() {
 
   let swRes = playCard(sw, refuge.uid);
   sw = swRes.state;
-  assert.ok(sw.combat!.pendingDiscard, 'Last Refuge must trigger pendingDiscard');
+  assert.ok(sw.combat!.pendingChoice, 'Last Refuge must ask for a discard');
   sw = discardSelectedCard(sw, strike.uid);
-  assert.equal(sw.combat!.pendingDiscard, undefined, 'Discarding clears pendingDiscard');
+  assert.equal(sw.combat!.pendingChoice, undefined, 'Discarding clears the choice');
 
   swRes = playCard(sw, rot.uid, sw.combat!.enemies[0].uid);
   sw = swRes.state;
@@ -403,6 +410,8 @@ function testP0Regressions() {
     logStoke: { ref: 'wound' },
     logAbility: { ref: 'temper' },
     logInterrupt: { ref: 'obsidian_warden', name: '黑曜守望者' },
+    handFull: { n: 10 },
+    blockRemoved: { n: 3 },
   } satisfies Record<CombatMsgKey, Omit<CombatMsg, 'key'>>;
   const cjk = /[一-鿿]/;
   for (const [key, rest] of Object.entries(samples)) {
@@ -674,7 +683,7 @@ function autoplay(run: RunState, turns: number): RunState {
       if (run.phase !== 'COMBAT') break;
       const target = run.combat!.enemies.find((e) => e.hp > 0)?.uid;
       run = playCard(run, card.uid, target).state;
-      if (run.combat?.pendingDiscard) run = discardSelectedCard(run, run.combat.hand[0].uid);
+      if (run.combat?.pendingChoice) run = discardSelectedCard(run, run.combat.hand[0].uid);
     }
     if (run.phase === 'COMBAT') run = resolveEnemyTurn(run).state;
   }
@@ -761,6 +770,315 @@ function testDamageBadge() {
   console.log('✓ Damage badge totals (effect cards, Ember, Temper, multi-effect) passed');
 }
 
+// ---------------------------------------------------------------------------
+// P3.1: triggers, choices, new effect ops, hand cap, card data, invariants
+// ---------------------------------------------------------------------------
+const testCard = (id: string, over: Partial<CardDef>): CardDef => ({
+  id,
+  name: id,
+  pool: 'neutral',
+  type: 'skill',
+  rarity: 'special',
+  target: 'self',
+  cost: 0,
+  description: id,
+  artKey: 'test',
+  ...over,
+});
+
+/** Temporarily add test-only cards (removed again afterwards). */
+function withTestCards(cards: CardDef[], fn: () => void) {
+  for (const c of cards) CARD_DEFS[c.id] = c;
+  try {
+    fn();
+  } finally {
+    for (const c of cards) delete CARD_DEFS[c.id];
+  }
+}
+
+const card = (defId: string, uid = `${defId}_${Math.random().toString(36).slice(2, 7)}`) => ({ uid, defId, upgraded: false });
+
+function testCardData() {
+  assert.deepEqual(validateCardDefs(CARD_DEFS), [], 'Every shipped card passes data validation');
+  const broken = validateCardDefs({
+    bad_key: testCard('other_id', {}),
+    no_target: testCard('no_target', { effects: [{ op: 'damage', n: 5 }] }),
+    mixed: testCard('mixed', { damage: 5, target: 'enemy', effects: [{ op: 'damage', n: 6 }] }),
+    no_upg_text: testCard('no_upg_text', { effects: [{ op: 'block', n: 5, up: 8 }] }),
+    bad_add: testCard('bad_add', { effects: [{ op: 'addCard', card: 'nope', n: 1 }] }),
+    echo_target: testCard('echo_target', { target: 'enemy', echo: [{ op: 'damage', n: 3 }] }),
+  });
+  const has = (frag: string) => assert.ok(broken.some((p) => p.includes(frag)), `validation catches: ${frag}`);
+  has('does not match its key');
+  has('no_target: effects[0] damage affects enemies');
+  has('mixed: has an effect list and flat fields');
+  has('no upgradedDescription');
+  has('unknown card "nope"');
+  has('echo_target: echo[0] damage');
+  console.log('✓ Card data validation passed (shipped cards clean, 6 kinds of mistakes caught)');
+}
+
+function testTriggers() {
+  // Combat-start relics now run as triggers, in one place.
+  let run = createNewRun('ironwarden');
+  run.relics = ['ember_core', 'wayfinder_lamp', 'cornerstone', 'ashen_fang', 'nightweave_ring', 'cinder_hourglass'].map(
+    (id) => RELIC_DEFS[id]
+  );
+  const hp0 = (s: RunState) => s.combat!.enemies.map((e) => e.maxHp);
+  run = startCombat(run, 'monster', 1);
+  const c = run.combat!;
+  assert.equal(c.maxEnergy, 4, 'Ember Core: +1 max Energy');
+  assert.equal(c.energy, 5, 'Wayfinder Lamp: +1 Energy on turn 1');
+  assert.equal(c.playerBlock, 10, 'Cornerstone: 10 Block');
+  assert.equal(c.playerStatuses.strength, 1, 'Ashen Fang: +1 Strength');
+  assert.equal(c.hand.length, 7, 'Nightweave Ring: opening draw 7');
+  assert.deepEqual(c.enemies.map((e) => e.hp), hp0(run).map((h) => h - 3), 'Cinder Hourglass hits on turn 1');
+
+  // enemyDeath fires once per enemy, playerDamaged reports HP lost.
+  const deaths: string[] = [];
+  const damaged: number[] = [];
+  const offDeath = registerHook({ id: 'test:death', on: 'enemyDeath', run: (_ctx, p) => deaths.push(p.enemyUid!) });
+  const offHurt = registerHook({ id: 'test:hurt', on: 'playerDamaged', run: (_ctx, p) => damaged.push(p.amount!) });
+  try {
+    let fight = freshCombat('ironwarden');
+    fight.combat!.enemies[0].hp = 5;
+    const s1 = createCardInstance('iron_strike');
+    const s2 = createCardInstance('iron_defend');
+    const ache = createCardInstance('marrow_ache');
+    fight.combat!.hand = [s1, s2, ache];
+    fight = playCard(fight, s1.uid, fight.combat!.enemies[0].uid).state;
+    assert.equal(deaths.length, 1, 'enemyDeath fired for the kill');
+    assert.deepEqual(damaged, [1], 'Marrow Ache reported 1 HP lost');
+  } finally {
+    offDeath();
+    offHurt();
+  }
+
+  // Two triggers that fire each other stop at the depth cap instead of looping forever.
+  let calls = 0;
+  const warn = console.warn;
+  let warned = 0;
+  console.warn = () => {
+    warned += 1;
+  };
+  const offA = registerHook({ id: 'test:a', on: 'exhaust', run: (ctx) => { calls += 1; runHooks(ctx, 'discard'); } });
+  const offB = registerHook({ id: 'test:b', on: 'discard', run: (ctx) => { calls += 1; runHooks(ctx, 'exhaust'); } });
+  try {
+    let loop = freshCombat('ironwarden');
+    const fuel = createCardInstance('wound');
+    loop.combat!.hand = [fuel];
+    loop = stokeCard(loop, fuel.uid).state;
+    assert.equal(loop.combat!.ember, 1, 'The action still completes');
+    assert.ok(calls > 0 && calls <= MAX_HOOK_DEPTH, `Loop capped (${calls} calls)`);
+    assert.equal(warned, 1, 'The cap warns once');
+  } finally {
+    offA();
+    offB();
+    console.warn = warn;
+  }
+  console.log('✓ Triggers: combat-start relics, enemyDeath, playerDamaged & loop cap passed');
+}
+
+function testChoices() {
+  const rekindle = testCard('t_rekindle', {
+    effects: [
+      { op: 'block', n: 5 },
+      { op: 'choose', from: 'exhaustPile', action: 'toHand', n: 1 },
+      { op: 'gainEnergy', n: 1 },
+    ],
+  });
+  const undertow = testCard('t_undertow', {
+    effects: [{ op: 'discard', n: 1 }, { op: 'gainEmber', n: 1, when: { chosenType: 'status' } }],
+  });
+  const scorch = testCard('t_scorch', { effects: [{ op: 'discardHand' }, { op: 'gainEmber', n: 1, per: 'discarded' }] });
+  const plate = testCard('t_plate', { type: 'attack', target: 'enemy', effects: [{ op: 'removeBlock', n: 6 }, { op: 'damage', n: 6 }] });
+  const random = testCard('t_random', { effects: [{ op: 'debuff', status: 'weak', n: 1, to: 'random' }] });
+  const optional = testCard('t_optional', {
+    effects: [{ op: 'choose', from: 'discardPile', action: 'toHandUpgraded', n: 1, optional: true }, { op: 'gainEnergy', n: 2 }],
+  });
+  const knives = testCard('t_knives', { effects: [{ op: 'addCard', card: 'throwing_knife', n: 5 }] });
+
+  withTestCards([rekindle, undertow, scorch, plate, random, optional, knives], () => {
+    // Take a card back from the exhaust pile; the rest of the card runs after the pick.
+    let run = freshCombat('ironwarden');
+    const src = card('t_rekindle');
+    const burned = card('iron_strike');
+    run.combat!.hand = [src];
+    run.combat!.exhaustPile = [burned];
+    run = playCard(run, src.uid).state;
+    const pc = run.combat!.pendingChoice!;
+    assert.equal(pc.from, 'exhaustPile');
+    assert.equal(run.combat!.playerBlock, 5, 'Effects before the choice already ran');
+    const energyBefore = run.combat!.energy;
+    assert.equal(playCard(run, burned.uid).state, run, 'Nothing else can be played during a choice');
+    // The choice survives a save and resume.
+    const loaded = parseSave(serializeRun(run));
+    assert.equal(loaded.status, 'ok');
+    run = resumeRun((loaded as Extract<LoadResult, { status: 'ok' }>).save);
+    run = chooseCard(run, burned.uid).state;
+    assert.ok(ids(run.combat!.hand).includes('iron_strike'), 'Picked card returned to hand');
+    assert.equal(run.combat!.pendingChoice, undefined);
+    assert.equal(run.combat!.energy, energyBefore + 1, 'Effects after the choice ran');
+
+    // With nothing to pick, the card just continues.
+    run = freshCombat('ironwarden');
+    const src2 = card('t_rekindle');
+    run.combat!.hand = [src2];
+    run = playCard(run, src2.uid).state;
+    assert.equal(run.combat!.pendingChoice, undefined, 'Empty pile: no choice');
+
+    // A condition on what was chosen.
+    for (const [discarded, ember] of [['wound', 1], ['iron_strike', 0]] as const) {
+      run = freshCombat('ironwarden');
+      const u = card('t_undertow');
+      const pick = card(discarded);
+      run.combat!.hand = [u, pick, card('iron_defend')];
+      run = playCard(run, u.uid).state;
+      run = chooseCard(run, pick.uid).state;
+      assert.equal(run.combat!.ember, ember, `Discarding ${discarded} gives ${ember} Ember`);
+    }
+
+    // Discard the whole hand: Echo fires per card, gains scale with the count.
+    run = freshCombat('shadowweaver');
+    const sc = card('t_scorch');
+    run.combat!.hand = [sc, card('ash_dart'), card('shadow_strike'), card('shadow_defend')];
+    run = playCard(run, sc.uid).state;
+    assert.equal(run.combat!.hand.length, 0);
+    assert.equal(run.combat!.ember, 3 + 1, '1 per discarded card + Ash Dart Echo');
+
+    // Remove Block before damage.
+    run = freshCombat('ironwarden');
+    run.combat!.enemies[0].block = 10;
+    const pl = card('t_plate');
+    run.combat!.hand = [pl];
+    run = playCard(run, pl.uid, run.combat!.enemies[0].uid).state;
+    assert.equal(run.combat!.enemies[0].block, 0);
+    assert.equal(run.combat!.enemies[0].hp, 198, '10 Block - 6 removed = 4 absorbed, 2 damage');
+
+    // A random target hits exactly one living enemy.
+    run = freshCombat('shadowweaver');
+    const e0 = run.combat!.enemies[0];
+    run.combat!.enemies = [e0, { ...e0, uid: 'r2', statuses: { ...e0.statuses } }, { ...e0, uid: 'r3', statuses: { ...e0.statuses } }];
+    const rd = card('t_random');
+    run.combat!.hand = [rd];
+    run = playCard(run, rd.uid).state;
+    assert.equal(run.combat!.enemies.filter((e) => e.statuses.weak === 1).length, 1);
+
+    // Optional choices can be skipped; the rest of the card still runs.
+    for (const take of [false, true]) {
+      run = freshCombat('ironwarden');
+      const op = card('t_optional');
+      const old = card('iron_strike');
+      run.combat!.hand = [op];
+      run.combat!.discardPile = [old];
+      const e = run.combat!.energy;
+      run = playCard(run, op.uid).state;
+      const pending = run.combat!.pendingChoice as PendingChoice | undefined;
+      assert.ok(pending?.optional, 'The choice is optional');
+      assert.ok(!choiceOptions(run.combat!, pending!).some((c) => c.uid === op.uid), 'A card cannot pick itself');
+      run = take ? chooseCard(run, old.uid).state : skipChoice(run).state;
+      assert.equal(run.combat!.energy, e + 2, 'The rest of the card ran');
+      assert.equal(run.combat!.hand.some((c) => c.uid === old.uid && c.upgraded), take, take ? 'Taken and upgraded' : 'Skipped');
+    }
+
+    // Hand cap: extra cards go to the discard pile, with one "hand full" message.
+    run = freshCombat('shadowweaver');
+    const kn = card('t_knives');
+    run.combat!.hand = [kn, ...Array.from({ length: 7 }, () => card('shadow_defend'))];
+    const res = playCard(run, kn.uid);
+    assert.equal(res.state.combat!.hand.length, HAND_CAP);
+    assert.equal(res.state.combat!.discardPile.filter((c) => c.defId === 'throwing_knife').length, 2);
+    assert.equal(res.events.filter((e) => e.msg.key === 'handFull').length, 1);
+  });
+
+  // v3 saves with the old discard prompt migrate to a choice.
+  const v3 = firstCombat('shadowweaver', 4);
+  const legacyCombat = v3.combat as unknown as Record<string, unknown>;
+  legacyCombat.pendingDiscard = { sourceCardUid: 'old', remaining: 1 };
+  const migrated = parseSave(JSON.stringify({ version: 3, savedAt: '', run: v3 }));
+  assert.equal(migrated.status, 'ok');
+  const mc = (migrated as Extract<LoadResult, { status: 'ok' }>).save.run.combat!;
+  assert.equal(mc.pendingChoice?.action, 'discard');
+  assert.equal((mc as unknown as Record<string, unknown>).pendingDiscard, undefined);
+  console.log('✓ Choices: exhaust pile, chosen-type condition, discard hand, remove Block, random target, optional, hand cap & v3 migration passed');
+}
+
+function testInvariants() {
+  // Random legal play: every card instance is always in exactly one pile.
+  seedRng(2026);
+  let actions = 0;
+  for (let game = 0; game < 120; game++) {
+    let run = createNewRun(game % 2 ? 'shadowweaver' : 'ironwarden');
+    run = startCombat(run, game % 3 === 0 ? 'elite' : 'monster', 1 + (game % 14));
+    for (let step = 0; step < 120 && run.phase === 'COMBAT'; step++) {
+      const c = run.combat!;
+      const roll = rng('bot');
+      if (c.pendingChoice) {
+        const opts = choiceOptions(c, c.pendingChoice);
+        run = chooseCard(run, opts[Math.floor(rng('bot') * opts.length)].uid).state;
+      } else if (roll < 0.1 && c.hand.length) {
+        run = stokeCard(run, c.hand[Math.floor(rng('bot') * c.hand.length)].uid).state;
+      } else if (roll < 0.15) {
+        run = useClassAbility(run).state;
+      } else if (roll < 0.85 && c.hand.length) {
+        const pick = c.hand[Math.floor(rng('bot') * c.hand.length)];
+        const living = c.enemies.filter((e) => e.hp > 0);
+        run = playCard(run, pick.uid, living[Math.floor(rng('bot') * living.length)]?.uid).state;
+      } else {
+        run = resolveEnemyTurn(run).state;
+      }
+      actions++;
+      if (!run.combat) break;
+      const all = [...run.combat.hand, ...run.combat.drawPile, ...run.combat.discardPile, ...run.combat.exhaustPile];
+      const uids = new Set(all.map((x) => x.uid));
+      assert.equal(uids.size, all.length, `game ${game} step ${step}: a card is in two piles`);
+      assert.ok(all.every((x) => CARD_DEFS[x.defId]), 'Only known cards');
+      assert.ok(run.combat.hand.length <= HAND_CAP, 'Hand never exceeds the cap');
+    }
+  }
+
+  // The shuffle is unbiased: all 24 orders of 4 cards about equally likely.
+  seedRng(99);
+  const counts = new Map<string, number>();
+  const trials = 24000;
+  for (let i = 0; i < trials; i++) {
+    const key = shuffleArray([0, 1, 2, 3]).join('');
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  assert.equal(counts.size, 24);
+  const expected = trials / 24;
+  const chi2 = [...counts.values()].reduce((sum, n) => sum + ((n - expected) ** 2) / expected, 0);
+  assert.ok(chi2 < 49.7, `Shuffle chi-square ${chi2.toFixed(1)} (df 23, p=0.001 limit 49.7)`);
+  console.log(`✓ Invariants: ${actions} random actions keep every card in one pile; shuffle chi-square ${chi2.toFixed(1)} passed`);
+}
+
+function testRngStreams() {
+  // Extra reward rolls (e.g. a bigger card pool) do not move the map, encounters or shuffles.
+  const sample = () => ({
+    map: generateSpireMap(),
+    enemies: spawnEncounter(6, 'monster').map((e) => [e.defId, e.hp]),
+    shuffle: shuffleArray([1, 2, 3, 4, 5, 6, 7, 8]),
+  });
+  seedRng(5);
+  const a = sample();
+  seedRng(5);
+  for (let i = 0; i < 25; i++) rng('reward');
+  const b = sample();
+  assert.deepEqual(b.map, a.map, 'Map unaffected by reward rolls');
+  assert.deepEqual(b.enemies, a.enemies, 'Encounters unaffected by reward rolls');
+  assert.deepEqual(b.shuffle, a.shuffle, 'Shuffles unaffected by reward rolls');
+
+  // Saves from before the streams stored one number; they still load and resume.
+  const run = firstCombat('ironwarden', 8);
+  const raw = JSON.parse(serializeRun(run));
+  raw.rngState = 12345;
+  const loaded = parseSave(JSON.stringify(raw));
+  assert.equal(loaded.status, 'ok');
+  const resumed = resumeRun((loaded as Extract<LoadResult, { status: 'ok' }>).save);
+  assert.equal(resumed.combat!.turn, run.combat!.turn);
+  console.log('✓ RNG streams: independent per system, old single-number saves still load passed');
+}
+
 testMapInvariants();
 testCombatMechanicsAndStats();
 testBilingualCoverage();
@@ -770,4 +1088,9 @@ testBossCharge();
 testDeterminismAndRooms();
 testSaves();
 testDamageBadge();
+testCardData();
+testTriggers();
+testChoices();
+testInvariants();
+testRngStreams();
 console.log('ALL VERIFICATION CHECKS PASSED');

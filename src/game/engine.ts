@@ -29,10 +29,13 @@ import {
   shuffleArray,
 } from './combat';
 import {
+  applyChoiceAction,
+  choiceOptions,
   computeCardBlock,
   conditionMet,
   computeHitDamage,
   newPlayInfo,
+  playInfoForChoice,
   runEffects,
   temperPerHitFor,
 } from './effects';
@@ -50,6 +53,7 @@ import {
   FloatingText,
   HeroClassId,
   MapNode,
+  PendingChoice,
   PotionDef,
   RunState,
   RunStats,
@@ -143,32 +147,18 @@ export function startCombat(
       };
     });
   }
-  const playerStatuses = emptyStatusMap();
-
-  if (hasRelic(state.relics, 'ashen_fang')) playerStatuses.strength += 1;
-  if (hasRelic(state.relics, 'featherstep_charm')) playerStatuses.dexterity += 1;
-
-  let playerBlock = 0;
-  if (hasRelic(state.relics, 'cornerstone')) playerBlock += 10;
-
-  let maxEnergy = 3;
-  if (hasRelic(state.relics, 'ember_core')) maxEnergy += 1;
-
-  let turn1Energy = maxEnergy;
-  if (hasRelic(state.relics, 'wayfinder_lamp')) turn1Energy += 1;
-
   // Innate cards first, then shuffle rest
   const deckClone = state.deck.map((c) => ({ ...c }));
   const innate = deckClone.filter((c) => CARD_DEFS[c.defId]?.innate);
   const others = shuffleArray(deckClone.filter((c) => !CARD_DEFS[c.defId]?.innate));
   const drawPile = [...innate, ...others];
 
-  let combat: CombatState = {
+  const combat: CombatState = {
     turn: 1,
-    energy: turn1Energy,
-    maxEnergy,
-    playerBlock,
-    playerStatuses,
+    energy: 3,
+    maxEnergy: 3,
+    playerBlock: 0,
+    playerStatuses: emptyStatusMap(),
     doubleDamageActive: false,
     drawPile,
     hand: [],
@@ -194,34 +184,17 @@ export function startCombat(
     abilityUsesThisCombat: 0,
   };
 
-  let initialDraw = 5;
-  if (hasRelic(state.relics, 'nightweave_ring')) initialDraw += 2;
-  if (hasRelic(state.relics, 'scout_satchel')) initialDraw += 2;
-
-  let relicDmgStart = 0;
-  // Cinder Hourglass triggers at start of each turn (including turn 1)
-  if (hasRelic(state.relics, 'cinder_hourglass')) {
-    combat.enemies = combat.enemies.map((e) => {
-      const dmg = Math.min(e.hp, 3);
-      relicDmgStart += dmg;
-      return { ...e, hp: Math.max(0, e.hp - 3) };
-    });
-    combat.combatDamageDealt = (combat.combatDamageDealt || 0) + relicDmgStart;
-    combat.log.push({ key: 'logCinderHourglass', n: 3 });
-  }
-
-  combat = drawCardsIntoHand(combat, initialDraw);
+  // Combat-start relics (Strength, Block, Energy, extra draw, turn-1 Hourglass)
+  // are triggers in hooks.ts; then the opening draw.
+  const ctx = new CombatCtx(state, combat);
+  runHooks(ctx, 'combatStart');
+  ctx.drawCards(5 + ctx.extraDraw);
 
   return {
     ...state,
     phase: 'COMBAT',
-    combat,
-    stats: {
-      ...state.stats,
-      blockGained: state.stats.blockGained + playerBlock,
-      totalDamageDealt: state.stats.totalDamageDealt + relicDmgStart,
-      relicDamageDealt: state.stats.relicDamageDealt + relicDmgStart,
-    },
+    combat: ctx.withCounters(),
+    stats: ctx.commitStats(state.stats),
     reward: null,
     shop: null,
     event: null,
@@ -231,12 +204,12 @@ export function startCombat(
 
 function generateShop(state: RunState): ShopState {
   const pool = getRewardPool(state.heroId);
-  const picked = shuffleArray(pool).slice(0, 5);
+  const picked = shuffleArray(pool, 'reward').slice(0, 5);
   const cards = picked.map((def) => {
     const basePrice = def.rarity === 'rare' ? 145 : def.rarity === 'uncommon' ? 75 : 50;
     return {
       card: createCardInstance(def.id, false),
-      price: basePrice + Math.floor(rng() * 14) - 7,
+      price: basePrice + Math.floor(rng('reward') * 14) - 7,
       sold: false,
     };
   });
@@ -297,7 +270,7 @@ export function enterMapNode(state: RunState, nodeId: string): RunState {
     return {
       ...nextBase,
       phase: 'TREASURE',
-      treasure: { relic, gold: 55 + Math.floor(rng() * 25), opened: false },
+      treasure: { relic, gold: 55 + Math.floor(rng('reward') * 25), opened: false },
       combat: null,
     };
   }
@@ -413,19 +386,12 @@ function finalizeCombatIfWon(
     };
   }
 
-  // Boss defeated -> Victory!
-  let nextHp = state.hp;
-  let postHeal = 0;
-  if (hasRelic(state.relics, 'bloodfire_sigil')) {
-    const h = Math.min(8, state.maxHp - nextHp);
-    nextHp += h;
-    postHeal += h;
-  }
-  if (hasRelic(state.relics, 'hunters_jerky') && nextHp <= Math.floor(state.maxHp / 2)) {
-    const h = Math.min(12, state.maxHp - nextHp);
-    nextHp += h;
-    postHeal += h;
-  }
+  // All enemies dead: victory triggers (end-of-combat heals) run first.
+  const winCtx = new CombatCtx(state, combat);
+  runHooks(winCtx, 'combatWon');
+  const nextHp = winCtx.hp;
+  const postHeal = winCtx.hpHealed;
+  events.push(...winCtx.events);
 
   const defeatedCount = combat.enemies.length;
   const nextStats = {
@@ -459,8 +425,8 @@ function finalizeCombatIfWon(
   }
 
   const gold = combat.isEliteFight
-    ? 28 + Math.floor(rng() * 12)
-    : 12 + Math.floor(rng() * 10);
+    ? 28 + Math.floor(rng('reward') * 12)
+    : 12 + Math.floor(rng('reward') * 10);
 
   const cardChoices = rollCardChoices(state.heroId, 3, combat.isEliteFight, state.rarePity || 0);
   const offeredRare = cardChoices.some((c) => CARD_DEFS[c.defId]?.rarity === 'rare');
@@ -473,7 +439,7 @@ function finalizeCombatIfWon(
     cardClaimed: false,
     relic: combat.isEliteFight ? rollRelic(state.relics.map((r) => r.id)) : undefined,
     relicClaimed: false,
-    potion: rng() < (combat.isEliteFight ? 0.6 : 0.38) ? rollPotion() : undefined,
+    potion: rng('reward') < (combat.isEliteFight ? 0.6 : 0.38) ? rollPotion() : undefined,
     potionClaimed: false,
   };
 
@@ -510,7 +476,7 @@ function finishPlayerAction(
 
 /** True when the player may act (their turn, nothing pending). */
 function canAct(combat: CombatState | null): combat is CombatState {
-  return Boolean(combat && !combat.pendingDiscard && !combat.enemyTurnInProgress);
+  return Boolean(combat && !combat.pendingChoice && !combat.enemyTurnInProgress);
 }
 
 export function playCard(
@@ -545,23 +511,8 @@ export function playCard(
   c.cardsPlayedThisTurn += 1;
   if (def.type === 'attack') c.attacksPlayedThisTurn += 1;
 
-  // Marrow Ache: lose 1 HP per curse still in hand.
-  const acheCount = c.hand.filter((x) => CARD_DEFS[x.defId]?.achingCurse).length;
-  if (acheCount > 0) {
-    ctx.loseHp(acheCount);
-    ctx.emit('player', { key: 'curseAche', n: acheCount }, 'damage');
-  }
-
-  // Cinderhorn Brute: gains Strength whenever a Skill is played.
-  if (def.type === 'skill') {
-    c.enemies = c.enemies.map((e) => {
-      if (e.hp > 0 && e.enraged) {
-        ctx.emit(e.uid, { key: 'enrage', n: 2 }, 'buff');
-        return { ...e, statuses: { ...e.statuses, strength: e.statuses.strength + 2 } };
-      }
-      return e;
-    });
-  }
+  // Marrow Ache in hand, Cinderhorn enrage on Skills, ... (hooks.ts)
+  runHooks(ctx, 'cardPlayed', { card });
 
   const play = newPlayInfo(card, def, targetEnemyUid, actualCost);
   play.temperPerHit = temperPerHitFor(def, card.upgraded, ctx.combat);
@@ -585,17 +536,15 @@ export function playCard(
   if (def.type === 'power') {
     // Powers leave combat cleanly
   } else if (shouldExhaust) {
-    ctx.combat.exhaustPile.push(card);
+    ctx.exhaustCard(card);
   } else {
     ctx.combat.discardPile.push(card);
   }
 
-  // Discard prompt (Last Refuge, Sleight of Hand, ...)
-  if (play.pendingDiscard > 0 && ctx.combat.hand.length > 0 && !ctx.combat.enemies.every((e) => e.hp <= 0)) {
-    ctx.combat.pendingDiscard = {
-      sourceCardUid: card.uid,
-      remaining: Math.min(play.pendingDiscard, ctx.combat.hand.length),
-    };
+  // A choose / discard step paused the card (Last Refuge, Sleight of Hand, ...):
+  // the player picks next, then the rest of the card runs (chooseCard).
+  if (play.pendingChoice && !ctx.combat.enemies.every((e) => e.hp <= 0)) {
+    ctx.combat.pendingChoice = play.pendingChoice;
   }
 
   ctx.log({ key: 'logPlayCard', ref: def.id, upgraded: card.upgraded });
@@ -620,34 +569,67 @@ export function playCard(
   return { ...result, hitEnemyUids: play.hitEnemyUids, playerBlocked: play.playerBlocked };
 }
 
+/** Run the rest of a paused card once its choice is complete. */
+function finishChoice(ctx: CombatCtx, pc: PendingChoice): void {
+  if (pc.then.length === 0) return;
+  const play = playInfoForChoice(pc);
+  if (!play) return;
+  runEffects(ctx, pc.then, play);
+  ctx.dmgPoison += ctx.rotburstChain();
+  ctx.checkBossStates();
+  ctx.dmgAttack += play.dealt;
+  if (play.lifesteal > 0) {
+    const healed = ctx.heal(play.lifesteal);
+    if (healed > 0) ctx.emit('player', { key: 'heal', n: healed }, 'heal');
+  }
+  if (play.pendingChoice && !ctx.combat.enemies.every((e) => e.hp <= 0)) {
+    ctx.combat.pendingChoice = play.pendingChoice;
+  }
+}
+
 /**
- * Resolve one pending discard choice. Echo cards trigger their Echo effect
- * when discarded this way (the end-of-turn discard does not count).
+ * Pick one card for the pending choice (discard from hand, take back from the
+ * exhaust pile, ...). Discarded Echo cards trigger their Echo here (the
+ * end-of-turn discard does not count). After the last pick the rest of the
+ * card runs.
  */
-export function discardCard(state: RunState, cardUid: string): CombatActionResult {
+export function chooseCard(state: RunState, cardUid: string): CombatActionResult {
   const combat = state.combat;
-  if (!combat || !combat.pendingDiscard) return { state, events: [] };
-  const card = combat.hand.find((c) => c.uid === cardUid);
+  const pc = combat?.pendingChoice;
+  if (!combat || !pc || combat.enemyTurnInProgress) return { state, events: [] };
+  const card = choiceOptions(combat, pc).find((c) => c.uid === cardUid);
   if (!card) return { state, events: [] };
 
   const ctx = new CombatCtx(state);
-  const c = ctx.combat;
-  const pending = combat.pendingDiscard;
-  c.hand = c.hand.filter((x) => x.uid !== cardUid);
-  c.discardPile.push(card);
-
-  const def = CARD_DEFS[card.defId];
-  if (def?.echo) {
-    ctx.emit('player', { key: 'echo', ref: def.id }, 'ember');
-    runEffects(ctx, def.echo, newPlayInfo(card, def));
+  if (pc.action !== 'discard') {
+    ctx.combat[pc.from] = ctx.combat[pc.from].filter((x) => x.uid !== cardUid);
   }
-  runHooks(ctx, 'discard', { card });
+  applyChoiceAction(ctx, pc, card);
   ctx.checkBossStates();
 
-  const remaining = pending.remaining - 1;
-  c.pendingDiscard = remaining > 0 && c.hand.length > 0 ? { ...pending, remaining } : undefined;
+  const next: PendingChoice = { ...pc, remaining: pc.remaining - 1, chosen: [...pc.chosen, card] };
+  if (next.remaining > 0 && choiceOptions(ctx.combat, next).length > 0) {
+    ctx.combat.pendingChoice = next;
+  } else {
+    ctx.combat.pendingChoice = undefined;
+    finishChoice(ctx, next);
+  }
   return finishPlayerAction(state, ctx);
 }
+
+/** Decline an optional choice; the rest of the card still runs. */
+export function skipChoice(state: RunState): CombatActionResult {
+  const combat = state.combat;
+  const pc = combat?.pendingChoice;
+  if (!combat || !pc || !pc.optional || combat.enemyTurnInProgress) return { state, events: [] };
+  const ctx = new CombatCtx(state);
+  ctx.combat.pendingChoice = undefined;
+  finishChoice(ctx, pc);
+  return finishPlayerAction(state, ctx);
+}
+
+/** Older name for chooseCard (discard choices). */
+export const discardCard = chooseCard;
 
 /** Legacy wrapper: resolve a discard choice and return only the new state. */
 export function discardSelectedCard(state: RunState, cardUid: string): RunState {
@@ -702,7 +684,7 @@ export function stokeCard(state: RunState, cardUid: string): CombatActionResult 
   const ctx = new CombatCtx(state);
   const c = ctx.combat;
   c.hand = c.hand.filter((x) => x.uid !== cardUid);
-  c.exhaustPile.push(card);
+  ctx.exhaustCard(card);
   c.stokesThisTurn += 1;
   ctx.stokes += 1;
   ctx.log({ key: 'logStoke', ref: card.defId, upgraded: card.upgraded });
@@ -810,23 +792,16 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
   const ctx = new CombatCtx(state);
   const c = ctx.combat;
 
-  // 1. End of the player's turn: Burn in hand, end-of-turn triggers, discard.
-  const burnCount = c.hand.filter((x) => CARD_DEFS[x.defId]?.endTurnBurn).length;
-  if (burnCount > 0) {
-    const burnDmg = burnCount * 2;
-    ctx.damagePlayer(burnDmg);
-    ctx.emit('player', { key: 'burn', n: burnDmg }, 'damage');
-  }
-
+  // 1. End of the player's turn: end-of-turn triggers (Burn, Ironhide, ...), discard.
   runHooks(ctx, 'turnEnd');
 
   // Discard hand (Ethereal cards exhaust)
   for (const card of c.hand) {
-    if (CARD_DEFS[card.defId]?.ethereal) c.exhaustPile.push(card);
+    if (CARD_DEFS[card.defId]?.ethereal) ctx.exhaustCard(card);
     else c.discardPile.push(card);
   }
   c.hand = [];
-  c.pendingDiscard = undefined;
+  c.pendingChoice = undefined;
 
   if (ctx.hp <= 0) {
     return {
@@ -946,7 +921,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       for (let k = 0; k < intent.addStatusCount; k++) {
         const statusCard = createCardInstance(intent.addStatusCardId, false);
         if (intent.statusToDrawPile) {
-          const pos = Math.floor(rng() * (ctx.combat.drawPile.length + 1));
+          const pos = Math.floor(rng('combat') * (ctx.combat.drawPile.length + 1));
           ctx.combat.drawPile.splice(pos, 0, statusCard);
         } else {
           ctx.combat.discardPile.push(statusCard);
@@ -993,6 +968,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
   }
 
   // Enemies may have died to Poison or Rotburst during their own turn.
+  ctx.noteDeaths();
   const wonCheck = finalizeCombatIfWon(
     { ...state, hp: ctx.hp, stats: ctx.commitStats(state.stats) },
     ctx.withCounters(),

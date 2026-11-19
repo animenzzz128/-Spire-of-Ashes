@@ -67,6 +67,16 @@ export const UI_COPY = {
     selectPotionTarget: '请点击一名敌人作为药水目标',
     discardPrompt: '张手牌进行丢弃',
     chooseDiscardPrefix: '请点击手牌中的',
+    choosePrompt: (n: number) => `请选择 ${n} 张牌`,
+    chooseFrom: { hand: '手牌', drawPile: '抽牌堆', discardPile: '弃牌堆', exhaustPile: '消耗堆' } as Record<string, string>,
+    choiceActions: {
+      discard: '丢弃',
+      exhaust: '消耗',
+      toHand: '放回手牌',
+      toHandUpgraded: '升级后放回手牌',
+      upgrade: '升级',
+    } as Record<string, string>,
+    skipChoice: '跳过',
     killBadge: '斩杀',
     previewDmg: '预计',
     mapTitle: '高塔攀登路线',
@@ -242,6 +252,16 @@ export const UI_COPY = {
     selectPotionTarget: 'Click an enemy to throw the potion',
     discardPrompt: 'card(s) from hand to discard',
     chooseDiscardPrefix: 'Click',
+    choosePrompt: (n: number) => `Choose ${n} card${n === 1 ? '' : 's'}`,
+    chooseFrom: { hand: 'Hand', drawPile: 'Draw pile', discardPile: 'Discard pile', exhaustPile: 'Exhaust pile' } as Record<string, string>,
+    choiceActions: {
+      discard: 'Discard',
+      exhaust: 'Exhaust',
+      toHand: 'Return to hand',
+      toHandUpgraded: 'Upgrade and return to hand',
+      upgrade: 'Upgrade',
+    } as Record<string, string>,
+    skipChoice: 'Skip',
     killBadge: 'LETHAL',
     previewDmg: 'Est.',
     mapTitle: 'Spire Ascent Map',
@@ -714,6 +734,10 @@ export function tCombatMsg(msg: CombatMsg, locale: Locale): string {
       const name = msg.ref === 'temper' ? (zh ? '淬火' : 'Temper') : zh ? '灰雾' : 'Ash Veil';
       return zh ? `使用职业技能【${name}】` : `Used class ability [${name}]`;
     }
+    case 'blockRemoved':
+      return zh ? `-${n} 格挡` : `-${n} Block`;
+    case 'handFull':
+      return zh ? `手牌已满（${n} 张）` : `Hand full (${n} cards)`;
     case 'logInterrupt': {
       const name = tEnemyName(msg.ref || '', msg.name || '', locale);
       return zh ? `${name} 的蓄能被打断，过载失衡！（跳过行动，易伤 +2）` : `${name}'s charge was interrupted! (skips its turn, Vulnerable +2)`;

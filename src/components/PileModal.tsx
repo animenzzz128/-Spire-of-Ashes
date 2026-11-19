@@ -14,6 +14,8 @@ interface PileModalProps {
   upgradePreviewMode?: boolean;
   onSelectCard?: (card: CardInstance) => void;
   onClose: () => void;
+  /** False for required choices: no close button (Esc does nothing). */
+  closable?: boolean;
 }
 
 export const PileModal: React.FC<PileModalProps> = ({
@@ -25,8 +27,9 @@ export const PileModal: React.FC<PileModalProps> = ({
   upgradePreviewMode = false,
   onSelectCard,
   onClose,
+  closable = true,
 }) => {
-  const dialogRef = useDialog<HTMLDivElement>(onClose);
+  const dialogRef = useDialog<HTMLDivElement>(() => closable && onClose());
   const [previewCard, setPreviewCard] = useState<CardInstance | null>(null);
   const zh = locale === 'zh';
 
@@ -41,6 +44,7 @@ export const PileModal: React.FC<PileModalProps> = ({
           <button
             type="button"
             onClick={onClose}
+            hidden={!closable}
             aria-label={UI_COPY[locale].close}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 bg-[#1a202c] text-slate-300 hover:text-white cursor-pointer"
           >

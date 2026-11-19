@@ -113,5 +113,5 @@ export function rollRelic(ownedIds: string[], includeRare = true): RelicDef {
   if (pool.length === 0) {
     return RELIC_DEFS.ashen_fang;
   }
-  return pool[Math.floor(rng() * pool.length)];
+  return pool[Math.floor(rng('reward') * pool.length)];
 }

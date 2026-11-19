@@ -33,7 +33,7 @@ export function bossChargeThreshold(ascension: number): number {
 }
 
 function randInt(min: number, max: number): number {
-  return Math.floor(rng() * (max - min + 1)) + min;
+  return Math.floor(rng('encounter') * (max - min + 1)) + min;
 }
 
 export function computeEnemyNextIntent(enemy: EnemyInstance, nextTurn: number): EnemyIntent {
@@ -303,7 +303,7 @@ export function spawnEncounter(floor: number, type: 'monster' | 'elite' | 'boss'
 
 function spawnNonBoss(floor: number, type: 'monster' | 'elite'): EnemyInstance[] {
   if (type === 'elite') {
-    const roll = rng();
+    const roll = rng('encounter');
     if (roll < 0.34) {
       return [
         makeEnemy('cinderhorn_brute', '烬角蛮兽', '精英守卫 · 厌恶法术', 80, 'cinderhorn_brute', {
@@ -339,7 +339,7 @@ function spawnNonBoss(floor: number, type: 'monster' | 'elite'): EnemyInstance[]
   // Normal encounters ramp in four tiers so difficulty climbs gradually
   // instead of jumping from single enemies (floors 1-4) to full pairs (floor 5).
   const weakSingle = (): EnemyInstance[] => {
-    const roll = rng();
+    const roll = rng('encounter');
     if (roll < 0.34) return [makeEnemy('ember_zealot', '深红狂信徒', '献祭学徒', randInt(44, 50), 'ember_zealot')];
     if (roll < 0.67) return [makeEnemy('cinder_burrower', '余烬掘地虫', '甲壳掠食者', randInt(40, 46), 'cinder_burrower')];
     return [makeEnemy('caustic_ooze', '大型腐蚀软泥', '腐蚀魔物', randInt(48, 54), 'caustic_ooze')];
@@ -352,7 +352,7 @@ function spawnNonBoss(floor: number, type: 'monster' | 'elite'): EnemyInstance[]
 
   // Tier 2 (floors 3-4): weak or strong singles
   if (floor <= 4) {
-    const roll = rng();
+    const roll = rng('encounter');
     if (roll < 0.5) return weakSingle();
     if (roll < 0.75) {
       return [makeEnemy('ash_marauder', '灰烬劫掠者', '蒙面刺客', randInt(44, 48), 'ash_marauder')];
@@ -364,7 +364,7 @@ function spawnNonBoss(floor: number, type: 'monster' | 'elite'): EnemyInstance[]
 
   // Tier 3 (floors 5-7): light pairs or a strong single
   if (floor <= 7) {
-    const roll = rng();
+    const roll = rng('encounter');
     if (roll < 0.35) {
       return [lesserOoze('小型腐蚀软泥·甲'), lesserOoze('小型腐蚀软泥·乙')];
     }
@@ -386,7 +386,7 @@ function spawnNonBoss(floor: number, type: 'monster' | 'elite'): EnemyInstance[]
       const hp = Math.round(e.maxHp * hpScale);
       return { ...e, hp, maxHp: hp };
     });
-  const roll = rng();
+  const roll = rng('encounter');
   if (roll < 0.2) {
     return scaled([
       makeEnemy('ash_marauder', '灰烬劫掠者', '蒙面刺客', randInt(46, 52), 'ash_marauder'),

@@ -1,33 +1,133 @@
-// Trigger hooks for relics and powers. Each hook checks its own condition
-// (relic owned, power stacks > 0) and mutates the action's CombatCtx.
-// Hooks for the same trigger run in array order, which is part of the rules
-// (e.g. Watchman's Horn Block lands before Cinder Hourglass damage).
+// Trigger hooks for relics, powers, curses, statuses and enemy traits. Each
+// hook checks its own condition (relic owned, power stacks > 0, card in hand)
+// and mutates the action's CombatCtx. Hooks for the same trigger run in array
+// order, which is part of the rules (e.g. Burn hits before Cinderglass Ward
+// checks for zero Block; Watchman's Horn Block lands before Cinder Hourglass).
 //
 // Adding a relic or power that reacts to an event = adding one entry here.
+// Nested triggers are capped (MAX_HOOK_DEPTH) so two effects that trigger each
+// other can never loop forever.
+import { CARD_DEFS } from './cards';
 import type { CombatCtx } from './combat';
 import { CardInstance } from './types';
 
 export type HookName =
+  | 'combatStart' // combat set up, before the opening draw
+  | 'cardPlayed' // a card was played (removed from hand, energy paid), before its effects
+  | 'attackPlayed' // an Attack card finished resolving
   | 'turnEnd' // player's turn ends, before the hand is discarded
   | 'turnStart' // player's next turn starts, after Block resets and before the draw
-  | 'attackPlayed' // an Attack card finished resolving
-  | 'stoke' // a card was Stoked
+  | 'stoke' // a card was Stoked (payload.card)
   | 'spendEmber' // Ember was spent (payload.amount)
-  | 'discard'; // a card effect made you discard a card (payload.card)
+  | 'discard' // a card effect made you discard a card (payload.card)
+  | 'exhaust' // a card was exhausted: played Exhaust card, Stoke, Ethereal, choice (payload.card)
+  | 'enemyDeath' // an enemy reached 0 HP (payload.enemyUid), once per enemy
+  | 'playerDamaged' // the player lost HP (payload.amount)
+  | 'combatWon'; // all enemies dead, before rewards
 
 export interface HookPayload {
   amount?: number;
   card?: CardInstance;
+  enemyUid?: string;
 }
 
-interface Hook {
+export interface Hook {
   id: string;
   on: HookName;
   run: (ctx: CombatCtx, payload: HookPayload) => void;
 }
 
-const HOOKS: Hook[] = [
+/** Nesting limit for triggers firing triggers. */
+export const MAX_HOOK_DEPTH = 100;
+
+/** Cinder Hourglass: 3 damage to every enemy, ignoring Block (turn 1 and every turn after). */
+function cinderHourglassTick(ctx: CombatCtx): void {
+  if (!ctx.hasRelic('cinder_hourglass')) return;
+  ctx.combat.enemies = ctx.combat.enemies.map((e) => {
+    if (e.hp <= 0) return e;
+    const d = Math.min(e.hp, 3);
+    ctx.dmgRelic += d;
+    const hit = { ...e, hp: Math.max(0, e.hp - 3) };
+    return hit.charge && !hit.charge.interrupted
+      ? { ...hit, charge: { ...hit.charge, progress: hit.charge.progress + 3 } }
+      : hit;
+  });
+  ctx.log({ key: 'logCinderHourglass', n: 3 });
+  ctx.dmgRelic += ctx.rotburstChain();
+  ctx.checkBossStates();
+}
+
+const relicAtStart = (id: string, run: (ctx: CombatCtx) => void): Hook => ({
+  id: `relic:${id}`,
+  on: 'combatStart',
+  run: (ctx) => {
+    if (ctx.hasRelic(id)) run(ctx);
+  },
+});
+
+const BUILTIN_HOOKS: Hook[] = [
+  // ---- combat start (before the opening draw) ----
+  relicAtStart('ashen_fang', (ctx) => {
+    ctx.combat.playerStatuses.strength += 1;
+  }),
+  relicAtStart('featherstep_charm', (ctx) => {
+    ctx.combat.playerStatuses.dexterity += 1;
+  }),
+  relicAtStart('cornerstone', (ctx) => ctx.gainBlock(10)),
+  relicAtStart('ember_core', (ctx) => {
+    ctx.combat.maxEnergy += 1;
+    ctx.combat.energy += 1;
+  }),
+  relicAtStart('wayfinder_lamp', (ctx) => {
+    ctx.combat.energy += 1;
+  }),
+  relicAtStart('nightweave_ring', (ctx) => {
+    ctx.extraDraw += 2;
+  }),
+  relicAtStart('scout_satchel', (ctx) => {
+    ctx.extraDraw += 2;
+  }),
+  { id: 'relic:cinder_hourglass:start', on: 'combatStart', run: (ctx) => cinderHourglassTick(ctx) },
+
+  // ---- a card is played (before its effects) ----
+  {
+    id: 'curse:marrow_ache',
+    on: 'cardPlayed',
+    run: (ctx) => {
+      const aches = ctx.combat.hand.filter((x) => CARD_DEFS[x.defId]?.achingCurse).length;
+      if (aches > 0) {
+        ctx.loseHp(aches);
+        ctx.emit('player', { key: 'curseAche', n: aches }, 'damage');
+      }
+    },
+  },
+  {
+    id: 'enemy:enrage',
+    on: 'cardPlayed',
+    run: (ctx, p) => {
+      if (!p.card || CARD_DEFS[p.card.defId]?.type !== 'skill') return;
+      ctx.combat.enemies = ctx.combat.enemies.map((e) => {
+        if (e.hp > 0 && e.enraged) {
+          ctx.emit(e.uid, { key: 'enrage', n: 2 }, 'buff');
+          return { ...e, statuses: { ...e.statuses, strength: e.statuses.strength + 2 } };
+        }
+        return e;
+      });
+    },
+  },
+
   // ---- turn end ----
+  {
+    id: 'status:burn',
+    on: 'turnEnd',
+    run: (ctx) => {
+      const burns = ctx.combat.hand.filter((x) => CARD_DEFS[x.defId]?.endTurnBurn).length;
+      if (burns > 0) {
+        ctx.damagePlayer(burns * 2);
+        ctx.emit('player', { key: 'burn', n: burns * 2 }, 'damage');
+      }
+    },
+  },
   {
     id: 'relic:cinderglass_ward',
     on: 'turnEnd',
@@ -88,24 +188,7 @@ const HOOKS: Hook[] = [
       }
     },
   },
-  {
-    id: 'relic:cinder_hourglass',
-    on: 'turnStart',
-    run: (ctx) => {
-      if (!ctx.hasRelic('cinder_hourglass')) return;
-      ctx.combat.enemies = ctx.combat.enemies.map((e) => {
-        if (e.hp <= 0) return e;
-        const d = Math.min(e.hp, 3);
-        ctx.dmgRelic += d;
-        const hit = { ...e, hp: Math.max(0, e.hp - 3) };
-        return hit.charge && !hit.charge.interrupted
-          ? { ...hit, charge: { ...hit.charge, progress: hit.charge.progress + 3 } }
-          : hit;
-      });
-      ctx.dmgRelic += ctx.rotburstChain();
-      ctx.checkBossStates();
-    },
-  },
+  { id: 'relic:cinder_hourglass', on: 'turnStart', run: (ctx) => cinderHourglassTick(ctx) },
 
   // ---- attacks ----
   {
@@ -146,10 +229,51 @@ const HOOKS: Hook[] = [
       }
     },
   },
+
+  // ---- victory ----
+  {
+    id: 'relic:bloodfire_sigil',
+    on: 'combatWon',
+    run: (ctx) => {
+      if (ctx.hasRelic('bloodfire_sigil')) ctx.heal(8);
+    },
+  },
+  {
+    id: 'relic:hunters_jerky',
+    on: 'combatWon',
+    run: (ctx) => {
+      if (ctx.hasRelic('hunters_jerky') && ctx.hp <= Math.floor(ctx.maxHp / 2)) ctx.heal(12);
+    },
+  },
 ];
 
+let hooks: Hook[] = [...BUILTIN_HOOKS];
+
+/**
+ * Add a hook at runtime (tests, experiments). Returns a function that removes it.
+ * Shipped content belongs in BUILTIN_HOOKS so trigger order stays reviewable.
+ */
+export function registerHook(hook: Hook): () => void {
+  hooks = [...hooks, hook];
+  return () => {
+    hooks = hooks.filter((h) => h !== hook);
+  };
+}
+
 export function runHooks(ctx: CombatCtx, name: HookName, payload: HookPayload = {}): void {
-  for (const hook of HOOKS) {
-    if (hook.on === name) hook.run(ctx, payload);
+  if (ctx.hookDepth >= MAX_HOOK_DEPTH) {
+    if (!ctx.hookLimitHit) {
+      ctx.hookLimitHit = true;
+      console.warn(`Trigger depth limit (${MAX_HOOK_DEPTH}) reached at "${name}"; stopping nested triggers.`);
+    }
+    return;
+  }
+  ctx.hookDepth += 1;
+  try {
+    for (const hook of hooks) {
+      if (hook.on === name) hook.run(ctx, payload);
+    }
+  } finally {
+    ctx.hookDepth -= 1;
   }
 }

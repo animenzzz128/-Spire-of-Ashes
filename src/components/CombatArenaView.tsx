@@ -16,6 +16,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { CARD_DEFS, getCardCost } from '../game/cards';
+import { choiceOptions } from '../game/effects';
 import {
   abilityCost,
   calculateCardTotalDamage,
@@ -64,7 +65,8 @@ interface CombatArenaViewProps {
   pendingPotionSlot: number | null;
   onCancelPendingPotion: () => void;
   onPlayCard: (cardUid: string, targetEnemyUid?: string) => void;
-  onDiscardCard: (cardUid: string) => void;
+  onChooseCard: (cardUid: string) => void;
+  onSkipChoice: () => void;
   onUsePotionOnEnemy: (slotIndex: number, enemyUid: string) => void;
   onEndTurn: () => void;
   onCardHoverSound: () => void;
@@ -393,7 +395,8 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
   pendingPotionSlot,
   onCancelPendingPotion,
   onPlayCard,
-  onDiscardCard,
+  onChooseCard,
+  onSkipChoice,
   onUsePotionOnEnemy,
   onEndTurn,
   onCardHoverSound,
@@ -516,7 +519,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
         enemyRefs.current.get(next)?.focus();
         return;
       }
-      if ((e.key === 'e' || e.key === 'E' || e.key === ' ') && !combat.pendingDiscard) {
+      if ((e.key === 'e' || e.key === 'E' || e.key === ' ') && !combat.pendingChoice) {
         const active = document.activeElement;
         if (active?.tagName !== 'BUTTON' && active?.getAttribute('role') !== 'button') {
           e.preventDefault();
@@ -525,11 +528,12 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
         return;
       }
       const num = parseInt(e.key, 10);
-      if (!isNaN(num) && num >= 1 && num <= 9) {
-        const card = combat.hand[num - 1];
+      if (!isNaN(num) && num >= 0 && num <= 9) {
+        // 1-9 pick cards 1-9; 0 picks the 10th (the hand holds up to 10).
+        const card = combat.hand[num === 0 ? 9 : num - 1];
         if (!card) return;
-        if (combat.pendingDiscard) {
-          onDiscardCard(card.uid);
+        if (combat.pendingChoice) {
+          if (combat.pendingChoice.from === 'hand') onChooseCard(card.uid);
           return;
         }
         handleCardClick(card);
@@ -584,8 +588,8 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
       setStokeMode(false);
       return;
     }
-    if (combat.pendingDiscard) {
-      onDiscardCard(card.uid);
+    if (combat.pendingChoice) {
+      if (combat.pendingChoice.from === 'hand') onChooseCard(card.uid);
       return;
     }
     if (isTouch && previewCardUid !== card.uid) {
@@ -623,7 +627,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
     setDraggingCardUid(null);
     const card = uid ? combat.hand.find((c) => c.uid === uid) : undefined;
     if (!card || combat.enemyTurnInProgress) return;
-    if (stokeMode || combat.pendingDiscard) {
+    if (stokeMode || combat.pendingChoice) {
       handleCardClick(card);
       return;
     }
@@ -914,7 +918,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
       </div>
 
       {/* Prompt Banners for Targeting / Discarding */}
-      {(isTargetingEnemy || combat.pendingDiscard || stokeMode) && (
+      {(isTargetingEnemy || combat.pendingChoice || stokeMode) && (
         <div className="relative z-20 mx-3 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-400/50 bg-[#171d29]/95 px-4 py-2 text-xs text-amber-200 shadow-lg sm:mx-auto sm:text-sm">
           {stokeMode ? (
             <>
@@ -928,12 +932,30 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                 {copy.cancel} (Esc)
               </button>
             </>
-          ) : combat.pendingDiscard ? (
-            <span>
-              {copy.chooseDiscardPrefix}{' '}
-              <strong className="text-white">{combat.pendingDiscard.remaining}</strong>{' '}
-              {copy.discardPrompt}
-            </span>
+          ) : combat.pendingChoice ? (
+            <>
+              {combat.pendingChoice.from === 'hand' && combat.pendingChoice.action === 'discard' ? (
+                <span>
+                  {copy.chooseDiscardPrefix}{' '}
+                  <strong className="text-white">{combat.pendingChoice.remaining}</strong>{' '}
+                  {copy.discardPrompt}
+                </span>
+              ) : (
+                <span>
+                  {copy.choosePrompt(combat.pendingChoice.remaining)} · {copy.chooseFrom[combat.pendingChoice.from]} →{' '}
+                  {copy.choiceActions[combat.pendingChoice.action]}
+                </span>
+              )}
+              {combat.pendingChoice.optional && (
+                <button
+                  type="button"
+                  onClick={onSkipChoice}
+                  className="rounded border border-white/20 px-2 py-0.5 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"
+                >
+                  {copy.skipChoice}
+                </button>
+              )}
+            </>
           ) : pendingPotionSlot !== null ? (
             <>
               <span>{copy.selectPotionTarget}</span>
@@ -1414,9 +1436,9 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                   state={state}
                   targetEnemy={previewEnemy}
                   selected={selectedCardUid === card.uid || previewCardUid === card.uid}
-                  discardMode={Boolean(combat.pendingDiscard)}
+                  discardMode={combat.pendingChoice?.from === 'hand'}
                   stokeMode={stokeMode}
-                  shortcutNumber={idx < 9 ? idx + 1 : undefined}
+                  shortcutNumber={idx < 9 ? idx + 1 : idx === 9 ? 0 : undefined}
                   draggableCard={!combat.enemyTurnInProgress}
                   onMouseEnter={() => {
                     setHoveredCardUid(card.uid);
@@ -1488,7 +1510,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
 
               <button
                 type="button"
-                disabled={combat.enemyTurnInProgress || Boolean(combat.pendingDiscard)}
+                disabled={combat.enemyTurnInProgress || Boolean(combat.pendingChoice)}
                 onClick={onEndTurn}
                 className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-lg md:px-6 md:py-3 hover:bg-amber-400 disabled:opacity-45 disabled:cursor-not-allowed transition-colors whitespace-nowrap cursor-pointer"
               >
@@ -1511,6 +1533,19 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
             ))}
           </ul>
         </div>
+      )}
+
+      {/* Choice from a pile (exhaust, discard, draw): pick here */}
+      {combat.pendingChoice && combat.pendingChoice.from !== 'hand' && (
+        <PileModal
+          locale={locale}
+          title={`${copy.chooseFrom[combat.pendingChoice.from]} → ${copy.choiceActions[combat.pendingChoice.action]}`}
+          subtitle={copy.choosePrompt(combat.pendingChoice.remaining)}
+          cards={choiceOptions(combat, combat.pendingChoice)}
+          onSelectCard={(card) => onChooseCard(card.uid)}
+          closable={Boolean(combat.pendingChoice.optional)}
+          onClose={onSkipChoice}
+        />
       )}
 
       {/* Pile Inspector Modal */}

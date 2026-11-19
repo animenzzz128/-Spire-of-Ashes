@@ -21,10 +21,11 @@ import { CARD_DEFS } from './game/cards';
 import {
   createNewRun,
   discardPotionSlot,
-  discardCard,
+  chooseCard,
   enterMapNode,
   playCard,
   resolveEnemyTurn,
+  skipChoice,
   stokeCard,
   useClassAbility,
   usePotion,
@@ -350,10 +351,20 @@ export default function App() {
     setRunState(res.state);
   };
 
-  const handleDiscardCard = (cardUid: string) => {
+  // Pending choices: discard from hand, take back from the exhaust pile, ...
+  const handleChooseCard = (cardUid: string) => {
     if (!runState) return;
+    const res = chooseCard(runState, cardUid);
+    if (res.state === runState) return;
     sound.cardDraw();
-    const res = discardCard(runState, cardUid);
+    pushCombatFeedback(res.events);
+    setRunState(res.state);
+  };
+
+  const handleSkipChoice = () => {
+    if (!runState) return;
+    const res = skipChoice(runState);
+    if (res.state === runState) return;
     pushCombatFeedback(res.events);
     setRunState(res.state);
   };
@@ -576,7 +587,8 @@ export default function App() {
                 pendingPotionSlot={pendingPotionSlot}
                 onCancelPendingPotion={() => setPendingPotionSlot(null)}
                 onPlayCard={handlePlayCard}
-                onDiscardCard={handleDiscardCard}
+                onChooseCard={handleChooseCard}
+                onSkipChoice={handleSkipChoice}
                 onUsePotionOnEnemy={handleUsePotionOnEnemy}
                 onEndTurn={handleEndTurn}
                 onCardHoverSound={() => sound.cardHover()}
