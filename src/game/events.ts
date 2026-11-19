@@ -106,7 +106,7 @@ export function generateSpireEvent(state: RunState): EventState {
     }),
   ];
 
-  const picked = templates[Math.floor(rng() * templates.length)];
+  const picked = templates[Math.floor(rng('event') * templates.length)];
   return picked();
 }
 
@@ -139,7 +139,7 @@ export function resolveEventOption(state: RunState, optionId: string): RunState 
       next.stats.hpLost += lost;
       const unupgraded = next.deck.filter((c) => !c.upgraded);
       if (unupgraded.length > 0) {
-        const target = unupgraded[Math.floor(rng() * unupgraded.length)];
+        const target = unupgraded[Math.floor(rng('event') * unupgraded.length)];
         next.deck = next.deck.map((c) => (c.uid === target.uid ? { ...c, upgraded: true } : c));
         outcome = '鲜血渗入石缝，神龛微光亮起，你的一张卡牌获得了淬炼升级（+）！';
         outcomeEn = 'Your blood seeps into the stone. The shrine shimmers, upgrading 1 card in your deck (+).';
@@ -165,7 +165,7 @@ export function resolveEventOption(state: RunState, optionId: string): RunState 
       // Pick 2 random un-upgraded cards (previously always the first two in deck order).
       const pool = next.deck.filter((c) => !c.upgraded);
       for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
+        const j = Math.floor(rng('event') * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
       }
       const targets = pool.slice(0, 2);
@@ -211,7 +211,7 @@ export function resolveEventOption(state: RunState, optionId: string): RunState 
       next.hp += healed;
       next.stats.hpHealed += healed;
       const rares = getRewardPool(next.heroId).filter((c) => c.rarity === 'rare');
-      const picked = rares[Math.floor(rng() * rares.length)];
+      const picked = rares[Math.floor(rng('event') * rares.length)];
       // The fountain's price: a permanent Marrow Ache curse (previously this option had no downside).
       next.deck.push(createCardInstance('marrow_ache', false));
       if (picked) {
@@ -235,7 +235,7 @@ export function resolveEventOption(state: RunState, optionId: string): RunState 
     }
     case 'toss_coin': {
       next.gold -= 60;
-      if (rng() < 0.5) {
+      if (rng('event') < 0.5) {
         const relic = rollRelic(next.relics.map((r) => r.id));
         next.relics.push(relic);
         const relicEn = RELIC_EN[relic.id];

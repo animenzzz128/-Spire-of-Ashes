@@ -16,19 +16,20 @@ import { resolveEnemyTurn } from './engine';
 import { HERO_CLASSES } from './heroes';
 import { POTION_DEFS } from './potions';
 import { RELIC_DEFS } from './relics';
-import { getRngState, seedRng } from './rng';
+import { getRngState, RNG_STREAMS, RngSnapshot, setRngState } from './rng';
 import { CardInstance, GamePhase, PotionDef, RelicDef, RunState } from './types';
 
 /** Same key as before versioning, so existing saves are found and migrated. */
 export const RUN_SAVE_KEY = 'spire_ashes_active_run_v2';
 /** Unreadable saves are copied here before being ignored, so nothing is silently lost. */
 export const CORRUPT_SAVE_KEY = 'spire_ashes_run_corrupt';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export interface SaveEnvelope {
   version: number;
   savedAt: string;
-  rngState?: number;
+  /** Every RNG stream's state (older saves stored a single number). */
+  rngState?: RngSnapshot | number;
   uidCounter?: number;
   run: RunState;
 }
@@ -75,6 +76,28 @@ const MIGRATIONS: Record<number, (e: Envelope) => Envelope> = {
     }
     return { ...e, version: 3 };
   },
+  // v3 -> v4: the discard prompt became a general choice.
+  3: (e) => {
+    const run = e.run as unknown as RunState;
+    const combat = run.combat as (RunState['combat'] & { pendingDiscard?: { sourceCardUid: string; remaining: number } }) | null;
+    if (combat?.pendingDiscard) {
+      const { pendingDiscard, ...rest } = combat;
+      run.combat = {
+        ...rest,
+        pendingChoice: {
+          sourceCardUid: pendingDiscard.sourceCardUid,
+          sourceDefId: '',
+          upgraded: false,
+          from: 'hand',
+          action: 'discard',
+          remaining: pendingDiscard.remaining,
+          chosen: [],
+          then: [],
+        },
+      };
+    }
+    return { ...e, version: 4 };
+  },
 };
 
 /** Version-2 saves were a bare RunState; later versions wrap it. */
@@ -94,6 +117,14 @@ function toEnvelope(parsed: unknown): Envelope | null {
 // Validation and repair
 // ---------------------------------------------------------------------------
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+function validRngState(v: unknown): RngSnapshot | number | undefined {
+  if (isNum(v)) return v;
+  if (v && typeof v === 'object' && RNG_STREAMS.every((s) => isNum((v as Record<string, unknown>)[s]))) {
+    return v as RngSnapshot;
+  }
+  return undefined;
+}
 const isArr = Array.isArray;
 
 function validCards(list: unknown, where: string, repairs: string[]): CardInstance[] | null {
@@ -146,7 +177,8 @@ export function validateRun(raw: Record<string, unknown>): { run: RunState; repa
     const exhaustPile = validCards(combat.exhaustPile, 'exhaust pile', repairs);
     if (!hand || !drawPile || !discardPile || !exhaustPile) return { error: 'combat piles are missing' };
     combat = { ...combat, hand, drawPile, discardPile, exhaustPile };
-    if (combat.pendingDiscard && hand.length === 0) combat = { ...combat, pendingDiscard: undefined };
+    const pc = combat.pendingChoice;
+    if (pc && !combat[pc.from]?.some((c) => c.uid !== pc.sourceCardUid)) combat = { ...combat, pendingChoice: undefined };
   } else {
     combat = null;
   }
@@ -215,7 +247,7 @@ export function parseSave(raw: string | null): LoadResult {
     save: {
       version: SAVE_VERSION,
       savedAt: typeof env.savedAt === 'string' ? env.savedAt : '',
-      rngState: isNum(env.rngState) ? env.rngState : undefined,
+      rngState: validRngState(env.rngState),
       uidCounter: isNum(env.uidCounter) ? env.uidCounter : undefined,
       run,
     },
@@ -229,7 +261,7 @@ export function parseSave(raw: string | null): LoadResult {
  * stayed locked forever).
  */
 export function resumeRun(save: SaveEnvelope): RunState {
-  if (save.rngState !== undefined) seedRng(save.rngState);
+  if (save.rngState !== undefined) setRngState(save.rngState);
   if (save.uidCounter !== undefined) setUidCounter(save.uidCounter);
   const run = save.run;
   if (run.phase === 'COMBAT' && run.combat?.enemyTurnInProgress) {

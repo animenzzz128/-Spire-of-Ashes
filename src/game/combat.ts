@@ -5,8 +5,9 @@
 // public engine API stays pure (RunState in, RunState out).
 import { computeEnemyNextIntent } from './enemies';
 import { runHooks } from './hooks';
-import { rng } from './rng';
+import { rng, RngStream } from './rng';
 import {
+  CardInstance,
   CombatLogEntry,
   CombatMsg,
   CombatState,
@@ -22,10 +23,17 @@ import {
 
 export const EMBER_CAP = 10;
 
-export function shuffleArray<T>(arr: T[]): T[] {
+/**
+ * Most cards a hand can hold. One rule everywhere: a draw stops (the card stays
+ * on the draw pile) and a card added by an effect goes to the discard pile, and
+ * both tell the player the hand is full.
+ */
+export const HAND_CAP = 10;
+
+export function shuffleArray<T>(arr: T[], stream: RngStream = 'shuffle'): T[] {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
+    const j = Math.floor(rng(stream) * (i + 1));
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
@@ -71,7 +79,7 @@ export function drawCardsIntoHand(combat: CombatState, count: number): CombatSta
   const hand = [...combat.hand];
 
   for (let i = 0; i < count; i++) {
-    if (hand.length >= 10) break;
+    if (hand.length >= HAND_CAP) break;
     if (drawPile.length === 0) {
       if (discardPile.length === 0) break;
       drawPile = shuffleArray(discardPile);
@@ -266,6 +274,11 @@ export class CombatCtx {
   abilityUses = 0;
   interrupts = 0;
   chargesFired = 0;
+  /** Extra cards for the opening draw (combatStart relics). */
+  extraDraw = 0;
+  /** Trigger nesting depth and whether the cap was hit (hooks.ts). */
+  hookDepth = 0;
+  hookLimitHit = false;
 
   constructor(state: RunState, combat: CombatState = state.combat as CombatState) {
     this.combat = cloneCombat(combat);
@@ -303,8 +316,10 @@ export class CombatCtx {
   /** HP loss that ignores Block (self-damage, curses). */
   loseHp(n: number): void {
     if (n <= 0) return;
-    this.hpLost += Math.min(this.hp, n);
+    const lost = Math.min(this.hp, n);
+    this.hpLost += lost;
     this.hp = Math.max(0, this.hp - n);
+    if (lost > 0) runHooks(this, 'playerDamaged', { amount: lost });
   }
 
   heal(n: number): number {
@@ -325,8 +340,10 @@ export class CombatCtx {
     this.blocked += c.playerBlock;
     const rem = raw - c.playerBlock;
     c.playerBlock = 0;
-    this.hpLost += Math.min(this.hp, rem);
+    const lost = Math.min(this.hp, rem);
+    this.hpLost += lost;
     this.hp = Math.max(0, this.hp - rem);
+    if (lost > 0) runHooks(this, 'playerDamaged', { amount: lost });
     return { hpDamage: rem, fullyBlocked: false };
   }
 
@@ -350,7 +367,32 @@ export class CombatCtx {
   }
 
   drawCards(n: number): void {
-    if (n > 0) this.combat = drawCardsIntoHand(this.combat, n);
+    if (n <= 0) return;
+    const before = this.combat.hand.length;
+    const available = this.combat.drawPile.length + this.combat.discardPile.length;
+    this.combat = drawCardsIntoHand(this.combat, n);
+    const drawn = this.combat.hand.length - before;
+    if (drawn < n && drawn < available && this.combat.hand.length >= HAND_CAP) this.noteHandFull();
+  }
+
+  /** Put a new card in hand, or on the discard pile if the hand is full. */
+  addToHand(card: CardInstance): 'hand' | 'discard' {
+    if (this.combat.hand.length < HAND_CAP) {
+      this.combat.hand.push(card);
+      return 'hand';
+    }
+    this.combat.discardPile.push(card);
+    this.noteHandFull();
+    return 'discard';
+  }
+
+  private handFullShown = false;
+
+  /** One "hand full" message per action, however many cards bounced. */
+  noteHandFull(): void {
+    if (this.handFullShown) return;
+    this.handFullShown = true;
+    this.emit('player', { key: 'handFull', n: HAND_CAP }, 'debuff');
   }
 
   /** Explode any dead Rotburst-marked enemies (chains). Returns HP damage dealt. */
@@ -360,7 +402,7 @@ export class CombatCtx {
     return res.explosionDamage;
   }
 
-  /** Boss phase 2 and charge interrupts; call after any damage. */
+  /** Boss phase 2, charge interrupts and death triggers; call after any damage. */
   checkBossStates(): void {
     this.combat.enemies = this.combat.enemies.map((e) => {
       let next = applyBossPhase2IfNeeded(e, this.events, this.combat.log);
@@ -371,6 +413,24 @@ export class CombatCtx {
       }
       return next;
     });
+    this.noteDeaths();
+  }
+
+  /** Fire enemyDeath once for every enemy that has reached 0 HP. */
+  noteDeaths(): void {
+    for (let i = 0; i < this.combat.enemies.length; i++) {
+      const e = this.combat.enemies[i];
+      if (e.hp <= 0 && !e.deathHandled) {
+        this.combat.enemies[i] = { ...e, deathHandled: true };
+        runHooks(this, 'enemyDeath', { enemyUid: e.uid });
+      }
+    }
+  }
+
+  /** Move a card to the exhaust pile and fire the exhaust trigger. */
+  exhaustCard(card: CardInstance): void {
+    this.combat.exhaustPile.push(card);
+    runHooks(this, 'exhaust', { card });
   }
 
   gainEmber(n: number): number {

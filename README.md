@@ -94,4 +94,14 @@ Options (environment variables):
 | `SIM_EMBER=off\|stoke\|full` | Limit what the bot does with Ember (to measure its impact) |
 | `SIM_TUNE='{"bossHp":300}'` | Override knobs from `src/game/balance.ts` for one run, to try a calibration before committing it |
 
-Engine layout: `engine.ts` (public actions), `combat.ts` (combat primitives), `effects.ts` (card effect interpreter; cards are effect lists), `hooks.ts` (relic and power triggers), `rooms.ts` (rewards, campfire, shop, treasure, events), `balance.ts` (tuning knobs), `rng.ts` (seedable RNG).
+Engine layout:
+
+- `engine.ts`: public actions (play, Stoke, ability, potions, choices, enemy turn).
+- `combat.ts`: combat primitives and the per-action working copy; `HAND_CAP` lives here.
+- `effects.ts`: card effect interpreter. Cards are effect lists. A `choose` step pauses a card until the player picks cards from any pile, then the rest of the list runs.
+- `hooks.ts`: every trigger (relics, powers, curses, statuses, enemy traits), with a depth cap against loops.
+- `rooms.ts`: rewards, campfire, shop, treasure, events.
+- `save.ts`: versioned saves with migrations and validation.
+- `balance.ts`: tuning knobs.
+- `rng.ts`: seedable random streams, one per system (map, encounters, rewards, events, shuffles, combat).
+- `validateCardDefs` in `cards.ts`: checks card data and runs in `npm test`.

@@ -8,7 +8,7 @@
 //   SIM_ASC=2 npm run sim    # ascension level
 //   SIM_SEED=1 npm run sim   # reproducible batch
 import { CARD_DEFS, effVal, getCardCost, getCardEffects } from '../src/game/cards';
-import { computeHitDamage, conditionMet, temperPerHitFor } from '../src/game/effects';
+import { choiceOptions, computeHitDamage, conditionMet, temperPerHitFor } from '../src/game/effects';
 import {
   calculateCardBlockPreview,
   calculateCardDamagePreview,
@@ -17,7 +17,7 @@ import {
   canUseAbility,
   CLASS_ABILITY,
   createNewRun,
-  discardSelectedCard,
+  chooseCard,
   enterMapNode,
   getAvailableNodeIds,
   playCard,
@@ -98,7 +98,7 @@ function cardValue(s: RunState, card: CardInstance, target: EnemyInstance): numb
   const u = card.upgraded;
   let v = 0;
   const cardTargets = def.target === 'all_enemies' ? living(s) : def.target === 'enemy' ? [target] : [];
-  const scope = (to?: 'all') => (to === 'all' ? living(s) : cardTargets);
+  const scope = (to?: 'all' | 'random') => (to === 'all' ? living(s) : to === 'random' ? living(s).slice(0, 1) : cardTargets);
   const temper = temperPerHitFor(def, u, c);
   let spend = 0;
   for (const e of getCardEffects(def)) {
@@ -250,6 +250,18 @@ function choosePlay(s: RunState, skip: Set<string>, goForInterrupt = false): { u
   return x ? { uid: x.uid } : null;
 }
 
+/** Pick for a pending choice: discard / exhaust the least useful card, take back the most useful. */
+function resolveChoice(s: RunState): RunState {
+  const pc = s.combat!.pendingChoice!;
+  const options = choiceOptions(s.combat!, pc);
+  if (pc.from === 'hand' && (pc.action === 'discard' || pc.action === 'exhaust')) {
+    const worst = worstCard(s);
+    return chooseCard(s, (options.find((o) => o.uid === worst.uid) ?? options[0]).uid).state;
+  }
+  const best = [...options].sort((a, b) => cardValue(s, b, lowestHp(s)) - cardValue(s, a, lowestHp(s)))[0];
+  return chooseCard(s, best.uid).state;
+}
+
 function worstCard(s: RunState): CardInstance {
   const c = s.combat!;
   const rank = (h: CardInstance) => {
@@ -394,7 +406,7 @@ function runCombat(s: RunState, rec: RunResult): RunState {
     const skip = new Set<string>();
     let guard = 0;
     while (s.phase === 'COMBAT' && guard++ < 100) {
-      if (s.combat!.pendingDiscard) { s = discardSelectedCard(s, worstCard(s).uid); continue; }
+      if (s.combat!.pendingChoice) { s = resolveChoice(s); continue; }
       const choice = choosePlay(s, skip, goForInterrupt);
       if (!choice) break;
       if (hasDamage(s.combat!.hand.find((h) => h.uid === choice.uid)!.defId) && wantAbility(s, true)) {
@@ -442,7 +454,7 @@ function chooseNode(s: RunState): string {
       default: return 0;
     }
   };
-  return nodes.map((n) => ({ n, sc: score(n.type) + rng() * 0.5 })).sort((a, b) => b.sc - a.sc)[0].n.id;
+  return nodes.map((n) => ({ n, sc: score(n.type) + rng('bot') * 0.5 })).sort((a, b) => b.sc - a.sc)[0].n.id;
 }
 
 const RAR: Record<string, number> = { rare: 3, uncommon: 2, common: 1 };
@@ -452,7 +464,7 @@ function handleReward(s: RunState): RunState {
   let next = claimPotion(claimRelic(claimGold(s)));
   if (next.deck.length <= 25 && r.cardChoices.length) {
     const pick = [...r.cardChoices].sort(
-      (a, b) => (RAR[CARD_DEFS[b.defId].rarity] || 0) + (b.upgraded ? 0.5 : 0) - ((RAR[CARD_DEFS[a.defId].rarity] || 0) + (a.upgraded ? 0.5 : 0)) + (rng() - 0.5) * 0.2
+      (a, b) => (RAR[CARD_DEFS[b.defId].rarity] || 0) + (b.upgraded ? 0.5 : 0) - ((RAR[CARD_DEFS[a.defId].rarity] || 0) + (a.upgraded ? 0.5 : 0)) + (rng('bot') - 0.5) * 0.2
     )[0];
     next = claimCard(next, pick);
   }

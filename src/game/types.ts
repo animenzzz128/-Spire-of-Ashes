@@ -35,7 +35,11 @@ export interface StatusMap {
 // predate effect lists keep their flat fields; cards.ts compiles those into an
 // equivalent list, so there is a single execution path.
 // ---------------------------------------------------------------------------
-export type EffectCondition = { emberAtLeast: number } | { temperedThisTurn: true };
+export type EffectCondition =
+  | { emberAtLeast: number }
+  | { temperedThisTurn: true }
+  // After a choice: at least one chosen card has this type (e.g. "if you discarded a status").
+  | { chosenType: CardType };
 
 export type PlayerBuffKey =
   | 'strength'
@@ -51,8 +55,20 @@ export type PlayerBuffKey =
 
 export type EnemyDebuffKey = 'vulnerable' | 'weak' | 'poison';
 
-/** 'all' widens a single-target card's effect to every living enemy. */
-export type EffectScope = 'all';
+/** 'all' widens a single-target card's effect to every living enemy; 'random' hits one random living enemy. */
+export type EffectScope = 'all' | 'random';
+
+/** Scales an amount by what happened earlier in the same card: cards chosen or discarded. */
+export type EffectPer = 'chosen' | 'discarded';
+
+/** Where a choice picks cards from, and what happens to each picked card. */
+export type ChoicePile = 'hand' | 'drawPile' | 'discardPile' | 'exhaustPile';
+export type ChoiceAction = 'discard' | 'exhaust' | 'toHand' | 'toHandUpgraded' | 'upgrade';
+
+export interface CardFilter {
+  types?: CardType[];
+  notUpgraded?: boolean;
+}
 
 export type CardEffect = { when?: EffectCondition } & (
   | {
@@ -84,6 +100,7 @@ export type CardEffect = { when?: EffectCondition } & (
       n: number;
       up?: number;
       perSpent?: boolean; // count = Ember spent earlier by this card (capped by n)
+      per?: EffectPer; // count = n x cards chosen / discarded by this card
       upgradedCopies?: boolean; // copies are upgraded when the source card is
     }
   | { op: 'upgradeAllInCombat' }
@@ -94,11 +111,47 @@ export type CardEffect = { when?: EffectCondition } & (
       n: number;
       up?: number;
       perEnemyHit?: boolean; // n per distinct enemy this card damaged, capped by max
+      per?: EffectPer; // n per card chosen / discarded by this card, capped by max
       max?: number;
     }
   | { op: 'spendEmber'; n: number | 'all' }
+  // Shorthand for choose { from: 'hand', action: 'discard' }.
   | { op: 'discard'; n: number; up?: number }
+  // Pause the card: the player picks up to n cards, then the rest of the list runs.
+  | {
+      op: 'choose';
+      from: ChoicePile;
+      action: ChoiceAction;
+      n: number;
+      up?: number;
+      filter?: CardFilter;
+      optional?: boolean;
+    }
+  // Discard the whole hand (each card fires Echo and discard triggers).
+  | { op: 'discardHand' }
+  | { op: 'removeBlock'; n: number; up?: number; to?: EffectScope }
+  | { op: 'heal'; n: number; up?: number }
 );
+
+/**
+ * A card waiting for the player to pick cards. Saved with the run, so the
+ * continuation (`then`) is plain effect data.
+ */
+export interface PendingChoice {
+  sourceCardUid: string;
+  sourceDefId: string;
+  upgraded: boolean;
+  targetUid?: string;
+  from: ChoicePile;
+  action: ChoiceAction;
+  remaining: number;
+  filter?: CardFilter;
+  optional?: boolean;
+  chosen: CardInstance[];
+  then: CardEffect[];
+  spent?: number;
+  xValue?: number;
+}
 
 export interface CardDef {
   id: string;
@@ -120,7 +173,6 @@ export interface CardDef {
   gainEnergy?: number;
   upgradedGainEnergy?: number;
   loseHp?: number;
-  healHp?: number;
   strengthMult?: number;
   upgradedStrengthMult?: number;
   applyVulnerable?: number;
@@ -243,6 +295,8 @@ export interface EnemyInstance {
   splitTriggered?: boolean;
   bossPhase2Triggered?: boolean;
   charge?: EnemyCharge;
+  /** Set once the enemyDeath trigger has fired for this enemy. */
+  deathHandled?: boolean;
 }
 
 export interface RelicDef {
@@ -329,7 +383,9 @@ export type CombatMsgKey =
   | 'echo'
   | 'logStoke'
   | 'logAbility'
-  | 'logInterrupt';
+  | 'logInterrupt'
+  | 'handFull'
+  | 'blockRemoved';
 
 export interface CombatMsg {
   key: CombatMsgKey;
@@ -378,10 +434,8 @@ export interface CombatState {
   enemies: EnemyInstance[];
   attacksPlayedThisTurn: number;
   cardsPlayedThisTurn: number;
-  pendingDiscard?: {
-    sourceCardUid: string;
-    remaining: number;
-  };
+  /** A card waiting for the player to pick cards (replaces the old pendingDiscard). */
+  pendingChoice?: PendingChoice;
   isBossFight: boolean;
   isEliteFight: boolean;
   enemyTurnInProgress: boolean;
