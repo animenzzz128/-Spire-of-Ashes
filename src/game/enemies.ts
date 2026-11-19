@@ -1,3 +1,5 @@
+import { rng } from './rng';
+import { BALANCE } from './balance';
 import { nextUid } from './cards';
 import { EnemyInstance, EnemyIntent, StatusMap } from './types';
 
@@ -24,8 +26,14 @@ export function emptyStatusMap(): StatusMap {
   };
 }
 
+// Damage needed to interrupt a charged attack (the Obsidian Warden's laser).
+// Tuned in balance.ts; see docs/design/p2-embers-design.md section 3.4.
+export function bossChargeThreshold(ascension: number): number {
+  return ascension >= 9 ? BALANCE.chargeThresholdA9 : BALANCE.chargeThreshold;
+}
+
 function randInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+  return Math.floor(rng() * (max - min + 1)) + min;
 }
 
 export function computeEnemyNextIntent(enemy: EnemyInstance, nextTurn: number): EnemyIntent {
@@ -183,9 +191,10 @@ export function computeEnemyNextIntent(enemy: EnemyInstance, nextTurn: number): 
       return {
         type: 'debuff',
         addStatusCardId: 'wound',
-        addStatusCount: 1,
+        // 2 Wounds: one Stoke a turn can burn one, so the pulse still clogs.
+        addStatusCount: 2,
         statusToDrawPile: true,
-        label: '脉冲干扰 · 抽牌堆塞入 1 张伤口',
+        label: '脉冲干扰 · 抽牌堆塞入 2 张伤口',
       };
     }
     return { type: 'attack', damage: 10, hits: 1, label: '奥术激光' };
@@ -214,20 +223,21 @@ export function computeEnemyNextIntent(enemy: EnemyInstance, nextTurn: number): 
       };
     }
     if (cycle === 3) {
-      // Ironhide grows +2 per cycle and caps at 8, so attack decks are not
-      // locked out by ever-stacking armor (it used to grow +4 with no cap).
-      const ironhideGain = enemy.statuses.ironhide < 8 ? 2 : 0;
+      // P2: the Warden charges its laser instead of stacking Ironhide. Dealing
+      // bossChargeThreshold() damage before it fires interrupts it (combat.ts).
+      const ironhide = enemy.statuses.ironhide < 8 ? BALANCE.bossCycleIronhide : 0;
       return {
         type: 'buff',
-        gainStrength: 2,
-        gainIronhide: ironhideGain || undefined,
+        gainStrength: BALANCE.bossCycleStrength,
+        gainIronhide: ironhide || undefined,
         block: 8,
-        label: ironhideGain ? '熔芯超载 · 力量+2 & 护甲' : '熔芯超载 · 力量+2 & 格挡',
+        startsCharge: true,
+        label: `熔芯蓄能 · 力量+${BALANCE.bossCycleStrength}${ironhide ? ' & 护甲' : ''}，开始蓄能`,
       };
     }
     return {
       type: 'attack',
-      damage: 28,
+      damage: BALANCE.bossLaser,
       hits: 1,
       label: '灭世炼狱射线',
     };
@@ -273,15 +283,27 @@ function makeEnemy(
 export function spawnEncounter(floor: number, type: 'monster' | 'elite' | 'boss'): EnemyInstance[] {
   if (type === 'boss') {
     return [
-      makeEnemy('obsidian_warden', '黑曜守望者', '塔顶终焉巨像', 220, 'boss_warden', {
+      makeEnemy('obsidian_warden', '黑曜守望者', '塔顶终焉巨像', BALANCE.bossHp, 'boss_warden', {
         isBoss: true,
         artifact: 2,
       }),
     ];
   }
 
+  const scale = BALANCE.enemyHpScale;
+  const withScale = (enemies: EnemyInstance[]): EnemyInstance[] =>
+    scale === 1
+      ? enemies
+      : enemies.map((e) => {
+          const hp = Math.round(e.maxHp * scale);
+          return { ...e, hp, maxHp: hp };
+        });
+  return withScale(spawnNonBoss(floor, type));
+}
+
+function spawnNonBoss(floor: number, type: 'monster' | 'elite'): EnemyInstance[] {
   if (type === 'elite') {
-    const roll = Math.random();
+    const roll = rng();
     if (roll < 0.34) {
       return [
         makeEnemy('cinderhorn_brute', '烬角蛮兽', '精英守卫 · 厌恶法术', 80, 'cinderhorn_brute', {
@@ -317,7 +339,7 @@ export function spawnEncounter(floor: number, type: 'monster' | 'elite' | 'boss'
   // Normal encounters ramp in four tiers so difficulty climbs gradually
   // instead of jumping from single enemies (floors 1-4) to full pairs (floor 5).
   const weakSingle = (): EnemyInstance[] => {
-    const roll = Math.random();
+    const roll = rng();
     if (roll < 0.34) return [makeEnemy('ember_zealot', '深红狂信徒', '献祭学徒', randInt(44, 50), 'ember_zealot')];
     if (roll < 0.67) return [makeEnemy('cinder_burrower', '余烬掘地虫', '甲壳掠食者', randInt(40, 46), 'cinder_burrower')];
     return [makeEnemy('caustic_ooze', '大型腐蚀软泥', '腐蚀魔物', randInt(48, 54), 'caustic_ooze')];
@@ -330,7 +352,7 @@ export function spawnEncounter(floor: number, type: 'monster' | 'elite' | 'boss'
 
   // Tier 2 (floors 3-4): weak or strong singles
   if (floor <= 4) {
-    const roll = Math.random();
+    const roll = rng();
     if (roll < 0.5) return weakSingle();
     if (roll < 0.75) {
       return [makeEnemy('ash_marauder', '灰烬劫掠者', '蒙面刺客', randInt(44, 48), 'ash_marauder')];
@@ -342,7 +364,7 @@ export function spawnEncounter(floor: number, type: 'monster' | 'elite' | 'boss'
 
   // Tier 3 (floors 5-7): light pairs or a strong single
   if (floor <= 7) {
-    const roll = Math.random();
+    const roll = rng();
     if (roll < 0.35) {
       return [lesserOoze('小型腐蚀软泥·甲'), lesserOoze('小型腐蚀软泥·乙')];
     }
@@ -364,7 +386,7 @@ export function spawnEncounter(floor: number, type: 'monster' | 'elite' | 'boss'
       const hp = Math.round(e.maxHp * hpScale);
       return { ...e, hp, maxHp: hp };
     });
-  const roll = Math.random();
+  const roll = rng();
   if (roll < 0.2) {
     return scaled([
       makeEnemy('ash_marauder', '灰烬劫掠者', '蒙面刺客', randInt(46, 52), 'ash_marauder'),

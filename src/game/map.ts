@@ -1,3 +1,4 @@
+import { rng } from './rng';
 import { MapNode, NodeType } from './types';
 
 export const TOTAL_FLOORS = 15;
@@ -7,7 +8,7 @@ export function generateSpireMap(): MapNode[] {
 
   // Floor 1..14 have 3-4 nodes distributed across cols 0..6
   for (let floor = 1; floor <= 14; floor++) {
-    const count = floor === 1 ? 3 : floor === 8 ? 3 : floor === 14 ? 3 : Math.random() < 0.55 ? 4 : 3;
+    const count = floor === 1 ? 3 : floor === 8 ? 3 : floor === 14 ? 3 : rng() < 0.55 ? 4 : 3;
     const colsPool = [0, 1, 2, 3, 4, 5, 6];
     const chosenCols: number[] = [];
 
@@ -18,7 +19,7 @@ export function generateSpireMap(): MapNode[] {
     }
     // Add slight organic jitter while keeping order
     for (let i = 0; i < chosenCols.length; i++) {
-      const jitter = Math.random() < 0.35 ? (Math.random() < 0.5 ? -1 : 1) : 0;
+      const jitter = rng() < 0.35 ? (rng() < 0.5 ? -1 : 1) : 0;
       const candidate = chosenCols[i] + jitter;
       if (
         candidate >= 0 &&
@@ -73,7 +74,7 @@ export function generateSpireMap(): MapNode[] {
       incomingCount.set(primary.id, (incomingCount.get(primary.id) || 0) + 1);
 
       // 45% chance to also branch to second-closest node if within distance 2
-      if (sortedNext.length > 1 && Math.abs(sortedNext[1].col - node.col) <= 2 && Math.random() < 0.45) {
+      if (sortedNext.length > 1 && Math.abs(sortedNext[1].col - node.col) <= 2 && rng() < 0.45) {
         if (!node.nextIds.includes(sortedNext[1].id)) {
           node.nextIds.push(sortedNext[1].id);
           incomingCount.set(sortedNext[1].id, (incomingCount.get(sortedNext[1].id) || 0) + 1);
@@ -102,7 +103,7 @@ function pickNodeType(floor: number): NodeType {
   if (floor === 8) return 'treasure';
   if (floor === 14) return 'rest';
 
-  const r = Math.random();
+  const r = rng();
   if (floor <= 4) {
     if (r < 0.56) return 'monster';
     if (r < 0.84) return 'event';

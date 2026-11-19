@@ -14,6 +14,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { EVENT_EN, Locale, UI_COPY, tCard, tPotion, tRelic } from '../game/i18n';
+import { restHealAmount } from '../game/rooms';
 import { CardInstance, RunState } from '../game/types';
 import { CardView } from './CardView';
 import { DamageStatsPanel } from './DamageStatsModal';
@@ -190,7 +191,7 @@ export const RestSiteView: React.FC<{
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const copy = UI_COPY[locale];
   // Show the HP actually restored, not the raw 30% (which ignores the max-HP cap).
-  const healAmount = Math.min(Math.floor(state.maxHp * 0.3), state.maxHp - state.hp);
+  const healAmount = restHealAmount(state);
   const hasUpgradeable = state.deck.some((c) => !c.upgraded);
 
   return (

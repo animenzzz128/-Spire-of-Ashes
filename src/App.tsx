@@ -18,17 +18,33 @@ import { TopHudBar } from './components/TopHudBar';
 import { TutorialGuideModal } from './components/TutorialGuideModal';
 import { CARD_DEFS } from './game/cards';
 import {
-  addPotionToSlot,
   createNewRun,
   discardPotionSlot,
-  discardSelectedCard,
+  discardCard,
   enterMapNode,
   playCard,
   resolveEnemyTurn,
+  stokeCard,
+  useClassAbility,
   usePotion,
 } from './game/engine';
-import { resolveEventOption } from './game/events';
 import { Locale, UI_COPY } from './game/i18n';
+import {
+  buyShopCard,
+  buyShopPotion,
+  buyShopRelic,
+  chooseEventOption,
+  claimCard,
+  claimGold,
+  claimPotion,
+  claimRelic,
+  openTreasure,
+  removeShopCard,
+  restHeal,
+  restUpgrade,
+  returnToMap,
+  skipCard,
+} from './game/rooms';
 import { sound } from './game/sound';
 import {
   CardInstance,
@@ -132,6 +148,11 @@ export default function App() {
     enemyHits?: string[],
     triggerHeroLunge?: boolean
   ) => {
+    if (events.some((e) => e.msg.key === 'interrupted')) {
+      sound.heavyHit();
+      setArenaShake(true);
+      setTimeout(() => setArenaShake(false), 300);
+    }
     if (events.length > 0) {
       setFloatingTexts((prev) => [...prev, ...events]);
       setTimeout(() => {
@@ -286,7 +307,38 @@ export default function App() {
   const handleDiscardCard = (cardUid: string) => {
     if (!runState) return;
     sound.cardDraw();
-    setRunState(discardSelectedCard(runState, cardUid));
+    const res = discardCard(runState, cardUid);
+    pushCombatFeedback(res.events);
+    setRunState(res.state);
+  };
+
+  // Ember: Stoke burns a hand card for 1 Ember; the class ability spends Ember.
+  const handleStokeCard = (cardUid: string) => {
+    if (!runState) return;
+    const res = stokeCard(runState, cardUid);
+    if (res.state === runState) return;
+    sound.campfire();
+    spawnVfx([{ targetUid: 'player', type: 'power' }]);
+    pushCombatFeedback(res.events);
+    setRunState(res.state);
+  };
+
+  const handleUseAbility = () => {
+    if (!runState) return;
+    const res = useClassAbility(runState);
+    if (res.state === runState) return;
+    const veil = runState.heroId === 'shadowweaver';
+    if (veil) {
+      sound.poison();
+      spawnVfx(
+        (res.state.combat?.enemies || []).filter((e) => e.hp > 0).map((e) => ({ targetUid: e.uid, type: 'poison' as const }))
+      );
+    } else {
+      sound.buff();
+      spawnVfx([{ targetUid: 'player', type: 'power' }]);
+    }
+    pushCombatFeedback(res.events);
+    setRunState(res.state);
   };
 
   const handleUsePotionClick = (slotIndex: number) => {
@@ -373,173 +425,35 @@ export default function App() {
     }, 420);
   };
 
-  // Reward Handlers
-  const handleClaimGold = () => {
-    if (!runState?.reward || runState.reward.goldClaimed) return;
-    sound.gold();
-    setRunState({
-      ...runState,
-      gold: runState.gold + runState.reward.gold,
-      stats: { ...runState.stats, goldEarned: runState.stats.goldEarned + runState.reward.gold },
-      reward: { ...runState.reward, goldClaimed: true },
-    });
+  // Room handlers: the rules live in game/rooms.ts; these only add sound.
+  const applyRoomAction = (next: RunState, cue?: () => void) => {
+    if (!runState || next === runState) return;
+    cue?.();
+    setRunState(next);
   };
 
-  const handleClaimCard = (card: CardInstance) => {
-    if (!runState?.reward || runState.reward.cardClaimed) return;
-    sound.cardDraw();
-    setRunState({
-      ...runState,
-      deck: [...runState.deck, card],
-      reward: { ...runState.reward, cardClaimed: true },
-    });
-  };
+  const handleClaimGold = () => runState && applyRoomAction(claimGold(runState), () => sound.gold());
+  const handleClaimCard = (card: CardInstance) =>
+    runState && applyRoomAction(claimCard(runState, card), () => sound.cardDraw());
+  const handleSkipCard = () => runState && applyRoomAction(skipCard(runState));
+  const handleClaimRelic = () => runState && applyRoomAction(claimRelic(runState), () => sound.buff());
+  const handleClaimPotion = () => runState && applyRoomAction(claimPotion(runState), () => sound.potion());
+  const handleReturnToMap = () => runState && applyRoomAction(returnToMap(runState));
 
-  const handleSkipCard = () => {
-    if (!runState?.reward || runState.reward.cardClaimed) return;
-    setRunState({
-      ...runState,
-      reward: { ...runState.reward, cardClaimed: true },
-    });
-  };
+  const handleRestHeal = () => runState && applyRoomAction(restHeal(runState), () => sound.campfire());
+  const handleUpgradeCard = (cardUid: string) =>
+    runState && applyRoomAction(restUpgrade(runState, cardUid), () => sound.buff());
 
-  const handleClaimRelic = () => {
-    if (!runState?.reward?.relic || runState.reward.relicClaimed) return;
-    sound.buff();
-    setRunState({
-      ...runState,
-      relics: [...runState.relics, runState.reward.relic],
-      reward: { ...runState.reward, relicClaimed: true },
-    });
-  };
+  const handleBuyShopCard = (idx: number) => runState && applyRoomAction(buyShopCard(runState, idx), () => sound.gold());
+  const handleBuyShopRelic = (idx: number) => runState && applyRoomAction(buyShopRelic(runState, idx), () => sound.gold());
+  const handleBuyShopPotion = (idx: number) =>
+    runState && applyRoomAction(buyShopPotion(runState, idx), () => sound.potion());
+  const handleRemoveShopCard = (cardUid: string) =>
+    runState && applyRoomAction(removeShopCard(runState, cardUid), () => sound.gold());
 
-  const handleClaimPotion = () => {
-    if (!runState?.reward?.potion || runState.reward.potionClaimed) return;
-    const res = addPotionToSlot(runState.potions, runState.reward.potion);
-    if (!res.added) return;
-    sound.potion();
-    setRunState({
-      ...runState,
-      potions: res.potions,
-      reward: { ...runState.reward, potionClaimed: true },
-    });
-  };
-
-  const handleReturnToMap = () => {
-    if (!runState) return;
-    setRunState({
-      ...runState,
-      phase: 'MAP',
-      reward: null,
-      shop: null,
-      event: null,
-      treasure: null,
-    });
-  };
-
-  // Rest Handlers
-  const handleRestHeal = () => {
-    if (!runState) return;
-    sound.campfire();
-    const rawHeal = Math.floor(runState.maxHp * 0.3);
-    const nextHp = Math.min(runState.maxHp, runState.hp + rawHeal);
-    const actualHeal = Math.max(0, nextHp - runState.hp);
-    setRunState({
-      ...runState,
-      hp: nextHp,
-      stats: { ...runState.stats, hpHealed: runState.stats.hpHealed + actualHeal },
-      phase: 'MAP',
-    });
-  };
-
-  const handleUpgradeCard = (cardUid: string) => {
-    if (!runState) return;
-    sound.buff();
-    setRunState({
-      ...runState,
-      deck: runState.deck.map((c) => (c.uid === cardUid ? { ...c, upgraded: true } : c)),
-      phase: 'MAP',
-    });
-  };
-
-  // Shop Handlers
-  const handleBuyShopCard = (idx: number) => {
-    if (!runState?.shop) return;
-    const item = runState.shop.cards[idx];
-    if (!item || item.sold || runState.gold < item.price) return;
-    sound.gold();
-    const nextCards = runState.shop.cards.map((c, i) => (i === idx ? { ...c, sold: true } : c));
-    setRunState({
-      ...runState,
-      gold: runState.gold - item.price,
-      deck: [...runState.deck, item.card],
-      shop: { ...runState.shop, cards: nextCards },
-    });
-  };
-
-  const handleBuyShopRelic = (idx: number) => {
-    if (!runState?.shop) return;
-    const item = runState.shop.relics[idx];
-    if (!item || item.sold || runState.gold < item.price) return;
-    sound.gold();
-    const nextRelics = runState.shop.relics.map((r, i) => (i === idx ? { ...r, sold: true } : r));
-    setRunState({
-      ...runState,
-      gold: runState.gold - item.price,
-      relics: [...runState.relics, item.relic],
-      shop: { ...runState.shop, relics: nextRelics },
-    });
-  };
-
-  const handleBuyShopPotion = (idx: number) => {
-    if (!runState?.shop) return;
-    const item = runState.shop.potions[idx];
-    if (!item || item.sold || runState.gold < item.price) return;
-    const res = addPotionToSlot(runState.potions, item.potion);
-    if (!res.added) return;
-    sound.potion();
-    const nextPots = runState.shop.potions.map((p, i) => (i === idx ? { ...p, sold: true } : p));
-    setRunState({
-      ...runState,
-      gold: runState.gold - item.price,
-      potions: res.potions,
-      shop: { ...runState.shop, potions: nextPots },
-    });
-  };
-
-  const handleRemoveShopCard = (cardUid: string) => {
-    if (!runState?.shop || runState.shop.removedThisVisit) return;
-    if (runState.gold < runState.shop.removePrice) return;
-    sound.gold();
-    setRunState({
-      ...runState,
-      gold: runState.gold - runState.shop.removePrice,
-      deck: runState.deck.filter((c) => c.uid !== cardUid),
-      shop: { ...runState.shop, removedThisVisit: true },
-    });
-  };
-
-  // Event & Treasure Handlers
-  const handleSelectEventOption = (optionId: string) => {
-    if (!runState) return;
-    sound.buff();
-    setRunState(resolveEventOption(runState, optionId));
-  };
-
-  const handleOpenTreasure = () => {
-    if (!runState?.treasure || runState.treasure.opened) return;
-    sound.gold();
-    setRunState({
-      ...runState,
-      gold: runState.gold + runState.treasure.gold,
-      relics: [...runState.relics, runState.treasure.relic],
-      stats: {
-        ...runState.stats,
-        goldEarned: runState.stats.goldEarned + runState.treasure.gold,
-      },
-      treasure: { ...runState.treasure, opened: true },
-    });
-  };
+  const handleSelectEventOption = (optionId: string) =>
+    runState && applyRoomAction(chooseEventOption(runState, optionId), () => sound.buff());
+  const handleOpenTreasure = () => runState && applyRoomAction(openTreasure(runState), () => sound.gold());
 
   const copy = UI_COPY[locale];
 
@@ -599,6 +513,8 @@ export default function App() {
                 onUsePotionOnEnemy={handleUsePotionOnEnemy}
                 onEndTurn={handleEndTurn}
                 onCardHoverSound={() => sound.cardHover()}
+                onStokeCard={handleStokeCard}
+                onUseAbility={handleUseAbility}
               />
             )}
             {runState.phase === 'REWARD' && (

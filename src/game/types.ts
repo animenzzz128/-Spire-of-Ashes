@@ -24,7 +24,81 @@ export interface StatusMap {
   venomEdge: number;
   rotburst: boolean;
   noDrawThisTurn: boolean;
+  // Ember powers (optional so statuses from older saves stay valid)
+  forgeHeart?: number; // gain N Block whenever you Stoke
+  smolderingHaze?: number; // whenever you spend Ember, apply that much Poison to ALL enemies
 }
+
+// ---------------------------------------------------------------------------
+// Card effects (P2.0). A card is an ordered list of effects run by the engine's
+// interpreter. `n` is the base amount and `up` the upgraded amount. Cards that
+// predate effect lists keep their flat fields; cards.ts compiles those into an
+// equivalent list, so there is a single execution path.
+// ---------------------------------------------------------------------------
+export type EffectCondition = { emberAtLeast: number } | { temperedThisTurn: true };
+
+export type PlayerBuffKey =
+  | 'strength'
+  | 'dexterity'
+  | 'ironhide'
+  | 'artifact'
+  | 'shade'
+  | 'infernalAvatar'
+  | 'miasma'
+  | 'venomEdge'
+  | 'forgeHeart'
+  | 'smolderingHaze';
+
+export type EnemyDebuffKey = 'vulnerable' | 'weak' | 'poison';
+
+/** 'all' widens a single-target card's effect to every living enemy. */
+export type EffectScope = 'all';
+
+export type CardEffect = { when?: EffectCondition } & (
+  | {
+      op: 'damage';
+      n: number;
+      up?: number;
+      hits?: number;
+      upHits?: number;
+      strMult?: number;
+      upStrMult?: number;
+      perEmber?: number; // +X damage per Ember you have (not spent)
+      upPerEmber?: number;
+      fromBlock?: boolean; // damage = your current Block
+      xHits?: boolean; // hits = energy spent on an X-cost card
+      lifesteal?: boolean;
+      to?: EffectScope;
+    }
+  | { op: 'block'; n: number; up?: number }
+  | { op: 'debuff'; status: EnemyDebuffKey; n: number; up?: number; to?: EffectScope }
+  | { op: 'multiplyPoison'; n: number; up?: number }
+  | { op: 'markRotburst' }
+  | { op: 'gainEnergy'; n: number; up?: number }
+  | { op: 'loseHp'; n: number; up?: number }
+  | { op: 'draw'; n: number; up?: number }
+  | { op: 'lockDraw' }
+  | {
+      op: 'addCard';
+      card: string;
+      n: number;
+      up?: number;
+      perSpent?: boolean; // count = Ember spent earlier by this card (capped by n)
+      upgradedCopies?: boolean; // copies are upgraded when the source card is
+    }
+  | { op: 'upgradeAllInCombat' }
+  | { op: 'buff'; status: PlayerBuffKey; n: number; up?: number }
+  | { op: 'flag'; flag: 'bastion' | 'doubleDamageNextTurn' }
+  | {
+      op: 'gainEmber';
+      n: number;
+      up?: number;
+      perEnemyHit?: boolean; // n per distinct enemy this card damaged, capped by max
+      max?: number;
+    }
+  | { op: 'spendEmber'; n: number | 'all' }
+  | { op: 'discard'; n: number; up?: number }
+);
 
 export interface CardDef {
   id: string;
@@ -87,6 +161,10 @@ export interface CardDef {
   innate?: boolean;
   endTurnBurn?: number;
   achingCurse?: boolean;
+  /** Effect list. When present it replaces the flat effect fields above. */
+  effects?: CardEffect[];
+  /** Echo: runs when a card effect makes you discard this card (not the end-of-turn discard). */
+  echo?: CardEffect[];
   description: string;
   upgradedDescription?: string;
   artKey: string;
@@ -105,7 +183,8 @@ export type IntentType =
   | 'defend'
   | 'buff'
   | 'debuff'
-  | 'sleep';
+  | 'sleep'
+  | 'stunned';
 
 export interface EnemyIntent {
   type: IntentType;
@@ -123,7 +202,15 @@ export interface EnemyIntent {
   addStatusCount?: number;
   statusToDrawPile?: boolean; // shuffle status cards into the draw pile instead of discard
   grantsEnrage?: boolean; // after this intent resolves, the enemy gains Strength whenever the player plays a Skill
+  startsCharge?: boolean; // after this intent resolves, the enemy starts charging its next attack (interruptible)
   label: string;
+}
+
+/** A charged attack. Dealing `threshold` damage to the enemy before it fires interrupts it. */
+export interface EnemyCharge {
+  threshold: number;
+  progress: number;
+  interrupted: boolean;
 }
 
 export type EnemyArtType =
@@ -155,6 +242,7 @@ export interface EnemyInstance {
   enraged?: boolean; // Cinderhorn Brute gains strength when player plays skills
   splitTriggered?: boolean;
   bossPhase2Triggered?: boolean;
+  charge?: EnemyCharge;
 }
 
 export interface RelicDef {
@@ -231,7 +319,17 @@ export type CombatMsgKey =
   | 'logCinderHourglass'
   | 'logPlayCard'
   | 'logUsePotion'
-  | 'logBossPhase2';
+  | 'logBossPhase2'
+  | 'gainEmber'
+  | 'spendEmber'
+  | 'temper'
+  | 'chargeStart'
+  | 'interrupted'
+  | 'stunned'
+  | 'echo'
+  | 'logStoke'
+  | 'logAbility'
+  | 'logInterrupt';
 
 export interface CombatMsg {
   key: CombatMsgKey;
@@ -248,7 +346,7 @@ export interface FloatingText {
   id: string;
   targetUid: string; // 'player' or enemy uid
   msg: CombatMsg;
-  tone: 'damage' | 'block' | 'heal' | 'poison' | 'buff' | 'debuff';
+  tone: 'damage' | 'block' | 'heal' | 'poison' | 'buff' | 'debuff' | 'ember';
 }
 
 export type CombatVfxType =
@@ -291,6 +389,15 @@ export interface CombatState {
   combatDamageBlocked?: number;
   combatDamageTaken?: number;
   log: CombatLogEntry[];
+  // Ember (P2). Saves from before P2 lack these; the engine fills defaults.
+  ember: number;
+  emberCap: number;
+  stokesThisTurn: number;
+  abilityUsesThisTurn: number;
+  temperPending: number; // Temper stacks waiting for the next Attack this turn
+  temperedThisTurn: boolean;
+  stokesThisCombat?: number;
+  abilityUsesThisCombat?: number;
 }
 
 export interface RewardState {
@@ -401,6 +508,11 @@ export interface RunStats {
   damageByCard: Record<string, CardDamageStat>;
   combatHistory: CombatHistoryEntry[];
   goldEarned: number;
+  // Ember stats (optional so older saves load)
+  stokes?: number;
+  abilityUses?: number;
+  chargesInterrupted?: number;
+  chargesFired?: number;
 }
 
 export interface HeroClassDef {

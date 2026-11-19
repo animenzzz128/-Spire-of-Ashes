@@ -6,25 +6,51 @@
 //   npm run sim              # report (SIM_N runs per class, default 2000)
 //   npm run sim:check        # also assert the balance target bands (CI)
 //   SIM_ASC=2 npm run sim    # ascension level
-import { CARD_DEFS, getCardCost } from '../src/game/cards';
+//   SIM_SEED=1 npm run sim   # reproducible batch
+import { CARD_DEFS, effVal, getCardCost, getCardEffects } from '../src/game/cards';
+import { computeHitDamage, conditionMet, temperPerHitFor } from '../src/game/effects';
 import {
-  addPotionToSlot,
   calculateCardBlockPreview,
   calculateCardDamagePreview,
   calculateEnemyAttackPreview,
+  canStoke,
+  canUseAbility,
+  CLASS_ABILITY,
   createNewRun,
   discardSelectedCard,
   enterMapNode,
   getAvailableNodeIds,
   playCard,
   resolveEnemyTurn,
+  stokeCard,
+  useClassAbility,
   usePotion,
 } from '../src/game/engine';
-import { resolveEventOption } from '../src/game/events';
+import { overrideBalance } from '../src/game/balance';
+import { rng, seedRng } from '../src/game/rng';
+import {
+  buyShopRelic,
+  chooseEventOption,
+  claimCard,
+  claimGold,
+  claimPotion,
+  claimRelic,
+  openTreasure,
+  removeShopCard,
+  restHeal,
+  restUpgrade,
+  returnToMap,
+} from '../src/game/rooms';
 import { CardInstance, EnemyInstance, HeroClassId, RunState } from '../src/game/types';
 
 const TURN_CAP = 60;
 const POLICY: 'cautious' | 'aggressive' = process.env.SIM_POLICY === 'aggressive' ? 'aggressive' : 'cautious';
+// SIM_SEED=<n> makes the whole batch reproducible (each run gets its own derived seed).
+const SEED = process.env.SIM_SEED !== undefined ? Number(process.env.SIM_SEED) : undefined;
+// SIM_EMBER=off|stoke|full limits what the bot does with Ember (ablation for tuning).
+const EMBER_MODE = (process.env.SIM_EMBER || 'full') as 'off' | 'stoke' | 'full';
+// SIM_TUNE='{"bossHp":260}' overrides src/game/balance.ts knobs for this run (experiments only).
+if (process.env.SIM_TUNE) overrideBalance(JSON.parse(process.env.SIM_TUNE));
 
 type EncType = 'monster' | 'elite' | 'boss';
 interface Enc { key: string; type: EncType; hpLost: number; turns: number; won: boolean; capped: boolean }
@@ -39,6 +65,12 @@ interface RunResult {
   bossTurns?: number;
   encounters: Enc[];
   elitesTaken: number;
+  playerTurns: number;
+  stokes: number;
+  abilityUses: number;
+  combats: number;
+  chargesInterrupted: number;
+  chargesFired: number;
 }
 
 const living = (s: RunState) => s.combat!.enemies.filter((e) => e.hp > 0);
@@ -57,48 +89,92 @@ function incoming(s: RunState): number {
 
 const lowestHp = (s: RunState) => [...living(s)].sort((a, b) => a.hp + a.block - (b.hp + b.block))[0];
 
+/** Rough value of 1 Ember: 2 Ember buy a Temper (+6 damage) or an Ash Veil (6 poison damage). */
+const EMBER_VALUE = 2.5;
+
 function cardValue(s: RunState, card: CardInstance, target: EnemyInstance): number {
   const def = CARD_DEFS[card.defId];
   const c = s.combat!;
   const u = card.upgraded;
-  const g = (b?: number, up?: number) => (u && up !== undefined ? up : b) || 0;
   let v = 0;
-  const targets = def.target === 'all_enemies' ? living(s) : def.target === 'enemy' ? [target] : [];
-  const cost = getCardCost(card);
-  if (def.damage !== undefined || def.blockAsDamage) {
-    for (const t of targets) {
-      const p = calculateCardDamagePreview(card, s, t);
-      const hits = cost === -1 ? c.energy : p.hits;
-      const raw = p.perHit * hits;
-      v += Math.min(Math.max(0, raw - t.block), t.hp) + (raw - t.block >= t.hp ? 8 : 0);
+  const cardTargets = def.target === 'all_enemies' ? living(s) : def.target === 'enemy' ? [target] : [];
+  const scope = (to?: 'all') => (to === 'all' ? living(s) : cardTargets);
+  const temper = temperPerHitFor(def, u, c);
+  let spend = 0;
+  for (const e of getCardEffects(def)) {
+    if (!conditionMet(c, e.when)) continue;
+    switch (e.op) {
+      case 'damage':
+        for (const t of scope(e.to)) {
+          const calc = computeHitDamage(e, u, c, t, temper);
+          const hits = e.xHits ? c.energy : calc.hits;
+          const raw = calc.perHit * hits;
+          v += Math.min(Math.max(0, raw - t.block), t.hp) + (raw - t.block >= t.hp ? 8 : 0);
+        }
+        break;
+      case 'debuff': {
+        const n = effVal(e, u);
+        for (const t of scope(e.to)) {
+          if (e.status === 'poison') v += Math.min(t.hp, n * 2.2);
+          if (e.status === 'vulnerable' && t.statuses.artifact === 0) v += 3 * n;
+          if (e.status === 'weak' && t.intent.damage) v += 2 * n;
+        }
+        break;
+      }
+      case 'multiplyPoison':
+        for (const t of cardTargets) v += Math.min(t.hp, t.statuses.poison * (effVal(e, u) - 1) * 1.8);
+        break;
+      case 'markRotburst':
+        if (living(s).length > 1) v += 15;
+        break;
+      case 'block': {
+        const need = Math.max(0, incoming(s) - c.playerBlock);
+        const blk = calculateCardBlockPreview(card, s).block;
+        if (blk) v += Math.min(blk, need) + Math.max(0, blk - need) * 0.25;
+        break;
+      }
+      case 'draw':
+        if (!c.playerStatuses.noDrawThisTurn) v += Math.min(effVal(e, u), c.drawPile.length + c.discardPile.length) * 3;
+        break;
+      case 'gainEnergy':
+        v += effVal(e, u) * 5;
+        break;
+      case 'addCard': {
+        const n = effVal(e, u);
+        v += (e.perSpent ? Math.min(n, spend) : n) * 3.5;
+        break;
+      }
+      case 'flag':
+        if (e.flag === 'doubleDamageNextTurn') v += 4;
+        break;
+      case 'buff':
+        if (e.status === 'artifact') v += 1;
+        break;
+      case 'loseHp':
+        v -= effVal(e, u) * (s.hp < 20 ? 3 : 0.6);
+        break;
+      case 'upgradeAllInCombat':
+        v += 12;
+        break;
+      case 'gainEmber': {
+        const n = effVal(e, u);
+        const amount = e.perEnemyHit ? Math.min(e.max ?? Infinity, n * cardTargets.length) : n;
+        v += Math.min(amount, c.emberCap - c.ember) * EMBER_VALUE;
+        break;
+      }
+      case 'spendEmber':
+        spend = e.n === 'all' ? c.ember : Math.min(e.n, c.ember);
+        v -= spend * 2;
+        break;
     }
   }
-  const poison = g(def.applyPoison, def.upgradedApplyPoison);
-  for (const t of targets) {
-    if (poison) v += Math.min(t.hp, poison * 2.2);
-    if (def.doublePoison) v += Math.min(t.hp, t.statuses.poison * (g(def.doublePoison, def.upgradedDoublePoison) - 1) * 1.8);
-    if (def.rotburst && living(s).length > 1) v += 15;
-    const vul = g(def.applyVulnerable, def.upgradedApplyVulnerable);
-    if (vul && t.statuses.artifact === 0) v += 3 * vul;
-    const wk = g(def.applyWeak, def.upgradedApplyWeak);
-    if (wk && t.intent.damage) v += 2 * wk;
-  }
-  const need = Math.max(0, incoming(s) - c.playerBlock);
-  const blk = calculateCardBlockPreview(card, s).block;
-  if (blk) v += Math.min(blk, need) + Math.max(0, blk - need) * 0.25;
-  const draw = g(def.draw, def.upgradedDraw);
-  if (draw && !c.playerStatuses.noDrawThisTurn) v += Math.min(draw, c.drawPile.length + c.discardPile.length) * 3;
-  v += g(def.gainEnergy, def.upgradedGainEnergy) * 5;
-  if (def.addKnives) v += g(def.addKnives, def.upgradedAddKnives) * 3.5;
-  if (def.doubleNextTurn) v += 4;
-  if (def.gainArtifact) v += 1;
-  if (def.loseHp) v -= def.loseHp * (s.hp < 20 ? 3 : 0.6);
-  if (def.upgradeAllInCombat) v += 12;
   if (card.defId === 'caustic_residue') v = 0.5;
   return v;
 }
 
-function choosePlay(s: RunState, skip: Set<string>): { uid: string; target?: string } | null {
+const hasDamage = (defId: string) => getCardEffects(CARD_DEFS[defId]).some((e) => e.op === 'damage');
+
+function choosePlay(s: RunState, skip: Set<string>, goForInterrupt = false): { uid: string; target?: string } | null {
   const c = s.combat!;
   const playable = c.hand.filter((h) => {
     if (skip.has(h.uid)) return false;
@@ -132,13 +208,15 @@ function choosePlay(s: RunState, skip: Set<string>): { uid: string; target?: str
   for (const e of living(s).filter((x) => x.intent.damage)) {
     for (const h of playable) {
       const d = CARD_DEFS[h.defId];
-      if (d.target !== 'enemy' || getCardCost(h) === -1 || !(d.damage !== undefined || d.blockAsDamage)) continue;
+      if (d.target !== 'enemy' || getCardCost(h) === -1 || !hasDamage(h.defId)) continue;
       const p = calculateCardDamagePreview(h, s, e);
       if (p.perHit * p.hits - e.block >= e.hp) return { uid: h.uid, target: e.uid };
     }
   }
   // 2b. block if needed
-  const blockNeeded = POLICY === 'cautious'
+  const blockNeeded = goForInterrupt
+    ? false
+    : POLICY === 'cautious'
     ? incoming(s) > c.playerBlock
     : incoming(s) - c.playerBlock > 0.15 * s.hp;
   if (blockNeeded) {
@@ -159,8 +237,11 @@ function choosePlay(s: RunState, skip: Set<string>): { uid: string; target?: str
     const d = CARD_DEFS[h.defId];
     const cost = getCardCost(h);
     if (cost === -1) continue;
-    const t = d.doublePoison ? [...living(s)].sort((a, b) => b.statuses.poison - a.statuses.poison)[0] : tgt;
-    const v = cardValue(s, h, t);
+    const charging = goForInterrupt ? living(s).find((e) => e.charge && !e.charge.interrupted) : undefined;
+    const t = d.doublePoison ? [...living(s)].sort((a, b) => b.statuses.poison - a.statuses.poison)[0] : charging || tgt;
+    let v = cardValue(s, h, t);
+    // Going for an interrupt: raw damage into the charging enemy counts even if blocked.
+    if (charging && hasDamage(h.defId) && d.target !== 'self') v += calculateCardDamagePreview(h, s, charging).perHit * 2;
     const r = v / (cost || 0.5);
     if (v > 0 && r > bestR) { bestR = r; best = { uid: h.uid, target: d.target === 'enemy' ? t.uid : undefined }; }
   }
@@ -216,6 +297,80 @@ function endTurnPotions(s: RunState): RunState {
   return s;
 }
 
+// ---- Ember policy ----
+// Stoke: statuses and curses first, then surplus starter cards; never powers.
+// Keep enough damage and Block in the combat deck: burning every leftover
+// Strike used to leave the bot unable to kill high-pressure enemies at all.
+const MIN_ATTACKS_KEPT = 4;
+const MIN_BLOCKS_KEPT = 3;
+const MIN_DECK_KEPT = 7;
+
+function stokeRank(s: RunState, h: CardInstance): number {
+  const d = CARD_DEFS[h.defId];
+  if (d.type === 'status' || d.type === 'curse') return -100;
+  if (d.type === 'power') return 100;
+  const c = s.combat!;
+  const pile = [...c.hand, ...c.drawPile, ...c.discardPile].filter((x) => {
+    const t = CARD_DEFS[x.defId].type;
+    return t !== 'status' && t !== 'curse';
+  });
+  if (pile.length <= MIN_DECK_KEPT) return 100;
+  const fx = getCardEffects(d);
+  const isAttack = fx.some((e) => e.op === 'damage');
+  const isBlock = fx.some((e) => e.op === 'block');
+  const count = (pred: (x: CardInstance) => boolean) => pile.filter(pred).length;
+  if (isAttack && count((x) => hasDamage(x.defId)) <= MIN_ATTACKS_KEPT) return 100;
+  if (isBlock && count((x) => getCardEffects(CARD_DEFS[x.defId]).some((e) => e.op === 'block')) <= MIN_BLOCKS_KEPT) return 100;
+  if (d.rarity === 'starter' && isBlock && incoming(s) <= c.playerBlock) return -20;
+  if (d.rarity === 'starter') return -10;
+  return cardValue(s, h, lowestHp(s));
+}
+
+function bestStoke(s: RunState, onlyJunk: boolean): CardInstance | null {
+  if (EMBER_MODE === 'off' || !canStoke(s)) return null;
+  const ranked = [...s.combat!.hand].sort((a, b) => stokeRank(s, a) - stokeRank(s, b));
+  const pick = ranked[0];
+  if (!pick) return null;
+  const r = stokeRank(s, pick);
+  if (onlyJunk ? r > -100 : r >= 100) return null;
+  return pick;
+}
+
+/** The charging enemy, if any, and whether this turn's damage can plausibly reach its threshold. */
+function interruptPlan(s: RunState): { go: boolean } {
+  const c = s.combat!;
+  const boss = living(s).find((e) => e.charge && !e.charge.interrupted);
+  if (!boss || !boss.charge) return { go: false };
+  const need = boss.charge.threshold - boss.charge.progress - boss.statuses.poison; // the tick before it acts counts
+  if (need <= 0) return { go: true };
+  // Greedy estimate: best damage per energy among playable attacks.
+  const attacks = c.hand
+    .filter((h) => hasDamage(h.defId) && getCardCost(h) >= 0 && CARD_DEFS[h.defId].target !== 'self')
+    .map((h) => ({ cost: getCardCost(h), dmg: calculateCardDamagePreview(h, s, boss).perHit * calculateCardDamagePreview(h, s, boss).hits }))
+    .sort((a, b) => b.dmg / (b.cost || 0.5) - a.dmg / (a.cost || 0.5));
+  let energy = c.energy;
+  let total = 0;
+  for (const a of attacks) {
+    if (a.cost <= energy) {
+      energy -= a.cost;
+      total += a.dmg;
+    }
+  }
+  const abilityBonus = canUseAbility(s) ? (CLASS_ABILITY[s.heroId].id === 'temper' ? 6 : 3) : 0;
+  return { go: total + abilityBonus >= need };
+}
+
+/** Spend Ember on the class ability now? */
+function wantAbility(s: RunState, aboutToAttack: boolean): boolean {
+  if (EMBER_MODE !== 'full' || !canUseAbility(s)) return false;
+  const c = s.combat!;
+  // Save Ember when the boss will start charging at the end of this turn.
+  const chargeNext = living(s).some((e) => e.intent.startsCharge);
+  if (chargeNext && c.ember < 4) return false;
+  if (CLASS_ABILITY[s.heroId].id === 'temper') return aboutToAttack;
+  return true; // Ash Veil: poison early ticks more often
+}
+
 function runCombat(s: RunState, rec: RunResult): RunState {
   const c0 = s.combat!;
   const type: EncType = c0.isBossFight ? 'boss' : c0.isEliteFight ? 'elite' : 'monster';
@@ -229,22 +384,37 @@ function runCombat(s: RunState, rec: RunResult): RunState {
     if (lastTurn > TURN_CAP) { capped = true; break; }
     s = startTurnPotions(s);
     if (s.phase !== 'COMBAT') break;
+    rec.playerTurns++;
+    const junk = bestStoke(s, true);
+    if (junk) s = stokeCard(s, junk.uid).state;
+    if (s.phase !== 'COMBAT') break;
+    const goForInterrupt = interruptPlan(s).go;
+    if (goForInterrupt && EMBER_MODE === 'full' && canUseAbility(s)) s = useClassAbility(s).state;
+    if (wantAbility(s, false)) s = useClassAbility(s).state;
     const skip = new Set<string>();
     let guard = 0;
     while (s.phase === 'COMBAT' && guard++ < 100) {
       if (s.combat!.pendingDiscard) { s = discardSelectedCard(s, worstCard(s).uid); continue; }
-      const choice = choosePlay(s, skip);
+      const choice = choosePlay(s, skip, goForInterrupt);
       if (!choice) break;
+      if (hasDamage(s.combat!.hand.find((h) => h.uid === choice.uid)!.defId) && wantAbility(s, true)) {
+        s = useClassAbility(s).state;
+        if (s.phase !== 'COMBAT') break;
+      }
       const res = playCard(s, choice.uid, choice.target);
       if (res.state === s) { skip.add(choice.uid); continue; }
       s = res.state;
     }
+    if (s.phase !== 'COMBAT') break;
+    const leftover = bestStoke(s, false);
+    if (leftover) s = stokeCard(s, leftover.uid).state;
     if (s.phase !== 'COMBAT') break;
     s = endTurnPotions(s);
     if (s.phase !== 'COMBAT') break;
     s = resolveEnemyTurn(s).state;
   }
   const won = s.phase === 'REWARD' || s.phase === 'VICTORY';
+  rec.combats++;
   rec.encounters.push({ key, type, hpLost: s.stats.hpLost - startLost, turns: lastTurn, won, capped });
   if (type === 'boss') rec.bossTurns = lastTurn;
   if (!won) {
@@ -272,29 +442,25 @@ function chooseNode(s: RunState): string {
       default: return 0;
     }
   };
-  return nodes.map((n) => ({ n, sc: score(n.type) + Math.random() * 0.5 })).sort((a, b) => b.sc - a.sc)[0].n.id;
+  return nodes.map((n) => ({ n, sc: score(n.type) + rng() * 0.5 })).sort((a, b) => b.sc - a.sc)[0].n.id;
 }
 
 const RAR: Record<string, number> = { rare: 3, uncommon: 2, common: 1 };
 
 function handleReward(s: RunState): RunState {
   const r = s.reward!;
-  let next: RunState = { ...s, gold: s.gold + r.gold, stats: { ...s.stats, goldEarned: s.stats.goldEarned + r.gold } };
-  if (r.relic) next.relics = [...next.relics, r.relic];
-  if (r.potion) next.potions = addPotionToSlot(next.potions, r.potion).potions;
+  let next = claimPotion(claimRelic(claimGold(s)));
   if (next.deck.length <= 25 && r.cardChoices.length) {
     const pick = [...r.cardChoices].sort(
-      (a, b) => (RAR[CARD_DEFS[b.defId].rarity] || 0) + (b.upgraded ? 0.5 : 0) - ((RAR[CARD_DEFS[a.defId].rarity] || 0) + (a.upgraded ? 0.5 : 0)) + (Math.random() - 0.5) * 0.2
+      (a, b) => (RAR[CARD_DEFS[b.defId].rarity] || 0) + (b.upgraded ? 0.5 : 0) - ((RAR[CARD_DEFS[a.defId].rarity] || 0) + (a.upgraded ? 0.5 : 0)) + (rng() - 0.5) * 0.2
     )[0];
-    next.deck = [...next.deck, pick];
+    next = claimCard(next, pick);
   }
-  return { ...next, phase: 'MAP', reward: null };
+  return returnToMap(next);
 }
 
 function handleRest(s: RunState): RunState {
-  if (s.hp < 0.55 * s.maxHp) {
-    return { ...s, hp: Math.min(s.maxHp, s.hp + Math.floor(s.maxHp * 0.3)), phase: 'MAP' };
-  }
+  if (s.hp < 0.55 * s.maxHp) return restHeal(s);
   const order = [
     (c: CardInstance) => CARD_DEFS[c.defId].rarity !== 'starter',
     (c: CardInstance) => c.defId === 'armor_breaker' || c.defId === 'sapping_cut' || c.defId === 'last_refuge',
@@ -303,23 +469,18 @@ function handleRest(s: RunState): RunState {
   ];
   for (const f of order) {
     const t = s.deck.find((c) => !c.upgraded && f(c) && CARD_DEFS[c.defId].type !== 'status' && CARD_DEFS[c.defId].type !== 'curse');
-    if (t) return { ...s, deck: s.deck.map((c) => (c.uid === t.uid ? { ...c, upgraded: true } : c)), phase: 'MAP' };
+    if (t) return restUpgrade(s, t.uid);
   }
-  return { ...s, hp: Math.min(s.maxHp, s.hp + Math.floor(s.maxHp * 0.3)), phase: 'MAP' };
+  return restHeal(s);
 }
 
 function handleShop(s: RunState): RunState {
-  const shop = s.shop!;
-  let next = { ...s };
+  let next = s;
   const strike = next.deck.find((c) => c.defId === 'iron_strike' || c.defId === 'shadow_strike');
-  if (strike && next.gold >= shop.removePrice) {
-    next.gold -= shop.removePrice;
-    next.deck = next.deck.filter((c) => c.uid !== strike.uid);
-  }
-  for (const item of [...shop.relics].sort((a, b) => b.price - a.price)) {
-    if (next.gold >= item.price) { next.gold -= item.price; next.relics = [...next.relics, item.relic]; }
-  }
-  return { ...next, phase: 'MAP', shop: null };
+  if (strike) next = removeShopCard(next, strike.uid);
+  const byPrice = next.shop!.relics.map((item, idx) => ({ item, idx })).sort((a, b) => b.item.price - a.item.price);
+  for (const { idx } of byPrice) next = buyShopRelic(next, idx);
+  return returnToMap(next);
 }
 
 function handleEvent(s: RunState): RunState {
@@ -334,18 +495,26 @@ function handleEvent(s: RunState): RunState {
     default: choice = ev.options.find((o) => !o.disabled)!.id;
   }
   if (!enabled(choice)) choice = ev.options.find((o) => !o.disabled)!.id;
-  const r = resolveEventOption(s, choice);
-  return { ...r, phase: 'MAP', event: null };
+  return returnToMap(chooseEventOption(s, choice));
 }
 
 function handleTreasure(s: RunState): RunState {
-  const t = s.treasure!;
-  return { ...s, gold: s.gold + t.gold, relics: [...s.relics, t.relic], phase: 'MAP', treasure: null };
+  return returnToMap(openTreasure(s));
 }
 
 function simulateRun(hero: HeroClassId, asc: number): RunResult {
   let s = createNewRun(hero, asc);
-  const rec: RunResult = { win: false, capped: false, encounters: [], elitesTaken: 0 };
+  const rec: RunResult = {
+    win: false, capped: false, encounters: [], elitesTaken: 0,
+    playerTurns: 0, stokes: 0, abilityUses: 0, combats: 0, chargesInterrupted: 0, chargesFired: 0,
+  };
+  const finish = (r: RunResult) => {
+    r.stokes = s.stats.stokes || 0;
+    r.abilityUses = s.stats.abilityUses || 0;
+    r.chargesInterrupted = s.stats.chargesInterrupted || 0;
+    r.chargesFired = s.stats.chargesFired || 0;
+    return r;
+  };
   let guard = 0;
   while (guard++ < 500) {
     switch (s.phase) {
@@ -363,9 +532,9 @@ function simulateRun(hero: HeroClassId, asc: number): RunResult {
       case 'TREASURE': s = handleTreasure(s); break;
       case 'VICTORY':
         rec.win = true;
-        return rec;
+        return finish(rec);
       case 'DEFEAT':
-        return rec;
+        return finish(rec);
       default: throw new Error('phase ' + s.phase);
     }
   }
@@ -377,7 +546,10 @@ const pct = (n: number, d: number) => `${((100 * n) / d).toFixed(1)}%`;
 
 function batch(hero: HeroClassId, asc: number, n: number, label: string) {
   const runs: RunResult[] = [];
-  for (let i = 0; i < n; i++) runs.push(simulateRun(hero, asc));
+  for (let i = 0; i < n; i++) {
+    if (SEED !== undefined) seedRng(SEED + i * 2 + (hero === 'ironwarden' ? 0 : 1));
+    runs.push(simulateRun(hero, asc));
+  }
   const wins = runs.filter((r) => r.win).length;
   console.log(`\n=== ${label}: ${hero} A${asc}, n=${n} ===`);
   console.log(`win rate: ${pct(wins, n)}  | avg elites taken: ${mean(runs.map((r) => r.elitesTaken)).toFixed(2)}`);
@@ -406,6 +578,14 @@ function batch(hero: HeroClassId, asc: number, n: number, label: string) {
   for (const [k, es] of Object.entries(encKeys).sort((a, b) => a[0].localeCompare(b[0]))) {
     console.log(`  ${k.padEnd(36)} ${mean(es.map((e) => e.hpLost)).toFixed(1).padStart(5)} | ${String(es.length).padStart(5)} | ${pct(es.filter((e) => !e.won).length, es.length).padStart(6)} | ${mean(es.map((e) => e.turns)).toFixed(1)}`);
   }
+  const sum = (f: (r: RunResult) => number) => runs.reduce((a, r) => a + f(r), 0);
+  const stokeRate = sum((r) => r.stokes) / Math.max(1, sum((r) => r.playerTurns));
+  const abilityPerCombat = sum((r) => r.abilityUses) / Math.max(1, sum((r) => r.combats));
+  const charges = sum((r) => r.chargesInterrupted + r.chargesFired);
+  const interruptRate = charges ? sum((r) => r.chargesInterrupted) / charges : NaN;
+  console.log(
+    `ember: Stoke on ${pct(sum((r) => r.stokes), Math.max(1, sum((r) => r.playerTurns)))} of turns | ability uses per combat ${abilityPerCombat.toFixed(2)} | boss charges interrupted ${charges ? pct(sum((r) => r.chargesInterrupted), charges) : 'n/a'} (${charges} charges)`
+  );
   const deathShare = (lo: number, hi: number) =>
     deaths.filter((d) => d.deathFloor! >= lo && d.deathFloor! <= hi).length / n;
   const eliteLoss: Record<string, number> = {};
@@ -418,6 +598,9 @@ function batch(hero: HeroClassId, asc: number, n: number, label: string) {
     deathShareF5to7: deathShare(5, 7),
     bossWinGivenReached: reachedBoss.length ? wins / reachedBoss.length : 0,
     eliteLoss,
+    stokeRate,
+    abilityPerCombat,
+    interruptRate,
   };
 }
 
@@ -453,6 +636,14 @@ if (CHECK) {
     for (const [k, v] of Object.entries(s.eliteLoss)) {
       check(v >= 0.02 && v <= 0.45, `${s.hero}: ${k} loss rate ${f(v)} (guardrail 2-45%)`);
     }
+    // Ember targets (design doc section 1.2): the mechanic is actually used,
+    // and interrupting the boss is a real coin flip rather than automatic.
+    check(s.stokeRate >= 0.5 && s.stokeRate <= 0.8, `${s.hero}: Stoke used on ${f(s.stokeRate)} of turns (guardrail 50-80%)`);
+    check(s.abilityPerCombat >= 1.5, `${s.hero}: ${s.abilityPerCombat.toFixed(2)} class abilities per combat (guardrail >= 1.5)`);
+    check(
+      s.interruptRate >= 0.35 && s.interruptRate <= 0.6,
+      `${s.hero}: boss charges interrupted ${f(s.interruptRate)} (guardrail 35-60%)`
+    );
   }
   const [a, b] = summaries.map((s) => s.winRate);
   const ratio = Math.max(a, b) / Math.max(Math.min(a, b), 1e-9);

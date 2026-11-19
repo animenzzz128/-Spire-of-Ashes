@@ -387,6 +387,11 @@ const KEYWORDS_ZH = [
   { term: '人工制品 (Artifact)', desc: '抵消下一次被施加的负面状态（易伤、虚弱、脆弱或中毒）。' },
   { term: '消耗 (Exhaust)', desc: '打出后进入消耗堆，本场战斗内不再回到抽牌堆或弃牌堆。' },
   { term: '铁肤 / 荆棘', desc: '铁肤每回合自动获得格挡；荆棘在受到攻击时对攻击者反弹伤害。' },
+  { term: '余烬 (Ember)', desc: '战斗内资源，上限 10，战斗结束清零。添薪获得，职业技能和部分卡牌花费。' },
+  { term: '添薪 (Stoke)', desc: '每回合 1 次：选 1 张手牌烧掉（本场战斗移除），获得 1 点余烬。状态牌和诅咒也能烧，不算打出牌。' },
+  { term: '淬火 / 灰雾', desc: '职业技能，每回合 1 次，花 2 点余烬。淬火：本回合下一张攻击牌 +6 伤害（多段或群体每段每目标 +3）。灰雾：所有敌人中毒 +3。' },
+  { term: '余响 (Echo)', desc: '这张牌被卡牌效果丢弃时触发额外效果（回合结束的弃牌不算）。' },
+  { term: '蓄能 / 打断', desc: '首领蓄能大招时，在它出手前对它造成足够伤害（含被格挡的部分和出手前的中毒）就能打断：跳过行动并获得 2 层易伤。' },
 ];
 
 const KEYWORDS_EN = [
@@ -400,6 +405,11 @@ const KEYWORDS_EN = [
   { term: 'Artifact', desc: 'Negates the next debuff applied (Vulnerable, Weak, Frail, or Poison).' },
   { term: 'Exhaust', desc: 'Removed from rotation until the end of the current combat (not permanently lost).' },
   { term: 'Ironhide / Thorns', desc: 'Ironhide grants Block automatically each turn; Thorns deals damage back to attackers.' },
+  { term: 'Ember', desc: 'Combat resource, max 10, cleared after combat. Gained by Stoking; spent on class abilities and some cards.' },
+  { term: 'Stoke', desc: 'Once per turn: burn 1 card from your hand (removed for this combat) to gain 1 Ember. Statuses and curses burn too; Stoking is not playing a card.' },
+  { term: 'Temper / Ash Veil', desc: 'Class abilities, once per turn, 2 Ember. Temper: your next Attack this turn deals +6 (+3 per hit, per target for multi-hit or AoE). Ash Veil: 3 Poison to ALL enemies.' },
+  { term: 'Echo', desc: 'Triggers a bonus when a card effect discards this card (not the end-of-turn discard).' },
+  { term: 'Charge / Interrupt', desc: 'Deal enough damage to a charging boss before it acts (blocked damage and the poison tick before it acts count) to interrupt it: it skips its turn and gains 2 Vulnerable.' },
 ];
 
 export const GlossaryModal: React.FC<GlossaryModalProps> = ({ locale, onClose }) => {

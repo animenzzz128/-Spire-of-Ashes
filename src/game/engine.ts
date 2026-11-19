@@ -1,33 +1,60 @@
+// Public game engine: pure functions from RunState to RunState.
+//
+// Combat actions build a CombatCtx (combat.ts), run card effects (effects.ts)
+// and relic/power triggers (hooks.ts) against it, then commit. Room actions
+// (rewards, rest, shop, treasure, events) live in rooms.ts.
+import { BALANCE } from './balance';
+import { rng } from './rng';
 import {
   CARD_DEFS,
   createCardInstance,
   getCardCost,
+  getCardEffects,
+  getPrimaryBlockEffect,
+  getPrimaryDamageEffect,
   getRewardPool,
   getStarterDeck,
   RARE_PITY_CAP,
   RARE_PITY_STEP,
   rollCardChoices,
 } from './cards';
-import { computeEnemyNextIntent, emptyStatusMap, spawnEncounter } from './enemies';
+import {
+  applyBossPhase2IfNeeded,
+  applyChargeInterruptIfNeeded,
+  CombatCtx,
+  drawCardsIntoHand,
+  EMBER_CAP,
+  hasRelic,
+  shuffleArray,
+} from './combat';
+import {
+  computeCardBlock,
+  computeHitDamage,
+  newPlayInfo,
+  runEffects,
+  temperPerHitFor,
+} from './effects';
+import { bossChargeThreshold, computeEnemyNextIntent, emptyStatusMap, spawnEncounter } from './enemies';
 import { generateSpireEvent } from './events';
 import { HERO_CLASSES } from './heroes';
+import { runHooks } from './hooks';
 import { generateSpireMap, TOTAL_FLOORS } from './map';
 import { rollPotion } from './potions';
 import { RELIC_DEFS, rollRelic } from './relics';
 import {
   CardInstance,
-  CombatLogEntry,
   CombatState,
   EnemyInstance,
   FloatingText,
   HeroClassId,
   MapNode,
   PotionDef,
-  RelicDef,
   RunState,
+  RunStats,
   ShopState,
-  StatusMap,
 } from './types';
+
+export { hasRelic, shuffleArray } from './combat';
 
 export interface CombatActionResult {
   state: RunState;
@@ -35,19 +62,6 @@ export interface CombatActionResult {
   hitPlayer?: boolean;
   hitEnemyUids?: string[];
   playerBlocked?: boolean;
-}
-
-export function shuffleArray<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
-export function hasRelic(relics: RelicDef[], id: string): boolean {
-  return relics.some((r) => r.id === id);
 }
 
 export function createNewRun(heroId: HeroClassId, ascension = 0): RunState {
@@ -101,26 +115,6 @@ export function getAvailableNodeIds(state: RunState): Set<string> {
   const current = state.map.find((n) => n.id === state.currentNodeId);
   if (!current) return new Set();
   return new Set(current.nextIds);
-}
-
-function drawCardsIntoHand(combat: CombatState, count: number): CombatState {
-  if (combat.playerStatuses.noDrawThisTurn) return combat;
-  let drawPile = [...combat.drawPile];
-  let discardPile = [...combat.discardPile];
-  const hand = [...combat.hand];
-
-  for (let i = 0; i < count; i++) {
-    if (hand.length >= 10) break;
-    if (drawPile.length === 0) {
-      if (discardPile.length === 0) break;
-      drawPile = shuffleArray(discardPile);
-      discardPile = [];
-    }
-    const top = drawPile.shift();
-    if (top) hand.push(top);
-  }
-
-  return { ...combat, drawPile, discardPile, hand };
 }
 
 export function startCombat(
@@ -187,6 +181,14 @@ export function startCombat(
     combatDamageBlocked: 0,
     combatDamageTaken: 0,
     log: [{ key: 'logEnterCombat', n: floor }],
+    ember: 0,
+    emberCap: EMBER_CAP,
+    stokesThisTurn: 0,
+    abilityUsesThisTurn: 0,
+    temperPending: 0,
+    temperedThisTurn: false,
+    stokesThisCombat: 0,
+    abilityUsesThisCombat: 0,
   };
 
   let initialDraw = 5;
@@ -231,7 +233,7 @@ function generateShop(state: RunState): ShopState {
     const basePrice = def.rarity === 'rare' ? 145 : def.rarity === 'uncommon' ? 75 : 50;
     return {
       card: createCardInstance(def.id, false),
-      price: basePrice + Math.floor(Math.random() * 14) - 7,
+      price: basePrice + Math.floor(rng() * 14) - 7,
       sold: false,
     };
   });
@@ -292,7 +294,7 @@ export function enterMapNode(state: RunState, nodeId: string): RunState {
     return {
       ...nextBase,
       phase: 'TREASURE',
-      treasure: { relic, gold: 55 + Math.floor(Math.random() * 25), opened: false },
+      treasure: { relic, gold: 55 + Math.floor(rng() * 25), opened: false },
       combat: null,
     };
   }
@@ -305,6 +307,10 @@ export function enterMapNode(state: RunState, nodeId: string): RunState {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Previews (UI numbers and bot decisions)
+// ---------------------------------------------------------------------------
+
 export function calculateCardDamagePreview(
   card: CardInstance,
   state: RunState,
@@ -312,29 +318,16 @@ export function calculateCardDamagePreview(
 ): { perHit: number; hits: number; boosted: boolean; reduced: boolean } {
   const def = CARD_DEFS[card.defId];
   const combat = state.combat;
-  if (!def || !combat) return { perHit: 0, hits: 1, boosted: false, reduced: false };
+  const effect = def ? getPrimaryDamageEffect(def) : undefined;
+  if (!def || !combat || !effect) return { perHit: 0, hits: 1, boosted: false, reduced: false };
 
-  let base = card.upgraded && def.upgradedDamage !== undefined ? def.upgradedDamage : def.damage || 0;
-  if (def.blockAsDamage) {
-    base = combat.playerBlock;
-  }
-  const hits = card.upgraded && def.upgradedHits !== undefined ? def.upgradedHits : def.hits || 1;
-  const strMult =
-    card.upgraded && def.upgradedStrengthMult !== undefined
-      ? def.upgradedStrengthMult
-      : def.strengthMult || 1;
-
-  let dmg = base + combat.playerStatuses.strength * strMult;
-  if (combat.playerStatuses.weak > 0) dmg = Math.floor(dmg * 0.75);
-  if (combat.doubleDamageActive) dmg = dmg * 2;
-  if (targetEnemy && targetEnemy.statuses.vulnerable > 0) dmg = Math.floor(dmg * 1.5);
-  dmg = Math.max(0, dmg);
-
+  const temper = temperPerHitFor(def, card.upgraded, combat);
+  const calc = computeHitDamage(effect, card.upgraded, combat, targetEnemy, temper);
   return {
-    perHit: dmg,
-    hits,
-    boosted: dmg > base,
-    reduced: dmg < base,
+    perHit: calc.perHit,
+    hits: calc.hits,
+    boosted: calc.perHit > calc.base,
+    reduced: calc.perHit < calc.base,
   };
 }
 
@@ -344,16 +337,12 @@ export function calculateCardBlockPreview(
 ): { block: number; boosted: boolean; reduced: boolean } {
   const def = CARD_DEFS[card.defId];
   const combat = state.combat;
-  if (!def || !combat) return { block: 0, boosted: false, reduced: false };
+  const effect = def ? getPrimaryBlockEffect(def) : undefined;
+  if (!def || !combat || !effect) return { block: 0, boosted: false, reduced: false };
 
-  const base = card.upgraded && def.upgradedBlock !== undefined ? def.upgradedBlock : def.block || 0;
+  const { base, block } = computeCardBlock(effect, card.upgraded, combat);
   if (base <= 0) return { block: 0, boosted: false, reduced: false };
-
-  let blk = base + combat.playerStatuses.dexterity;
-  if (combat.playerStatuses.frail > 0) blk = Math.floor(blk * 0.75);
-  blk = Math.max(0, blk);
-
-  return { block: blk, boosted: blk > base, reduced: blk < base };
+  return { block, boosted: block > base, reduced: block < base };
 }
 
 export function calculateEnemyAttackPreview(
@@ -379,147 +368,9 @@ export function calculateEnemyAttackPreview(
   };
 }
 
-function applyDebuffToStatuses(
-  statuses: StatusMap,
-  key: 'vulnerable' | 'weak' | 'frail' | 'poison',
-  amount: number
-): { statuses: StatusMap; blockedByArtifact: boolean } {
-  if (amount <= 0) return { statuses, blockedByArtifact: false };
-  if (statuses.artifact > 0) {
-    return {
-      statuses: { ...statuses, artifact: statuses.artifact - 1 },
-      blockedByArtifact: true,
-    };
-  }
-  return {
-    statuses: { ...statuses, [key]: statuses[key] + amount },
-    blockedByArtifact: false,
-  };
-}
-
-function damageEnemy(
-  enemy: EnemyInstance,
-  rawDamage: number,
-  playerVenomEdge: number
-): { enemy: EnemyInstance; hpDamage: number; blocked: boolean } {
-  if (enemy.hp <= 0) return { enemy, hpDamage: 0, blocked: false };
-  let block = enemy.block;
-  let hp = enemy.hp;
-  let hpDamage = 0;
-  let blocked = false;
-
-  if (block >= rawDamage) {
-    block -= rawDamage;
-    blocked = rawDamage > 0;
-  } else {
-    // Only damage that actually removes HP counts (no overkill in stats / lifesteal).
-    hpDamage = Math.min(hp, rawDamage - block);
-    block = 0;
-    hp = hp - hpDamage;
-  }
-
-  let statuses = { ...enemy.statuses };
-  if (hpDamage > 0 && playerVenomEdge > 0) {
-    const res = applyDebuffToStatuses(statuses, 'poison', playerVenomEdge);
-    statuses = res.statuses;
-  }
-
-  let asleep = enemy.asleep;
-  if (hpDamage > 0 && asleep) {
-    asleep = false;
-  }
-
-  const updated: EnemyInstance = {
-    ...enemy,
-    hp,
-    block,
-    statuses,
-    asleep,
-  };
-
-  if (asleep === false && enemy.asleep === true && hp > 0) {
-    updated.intent = computeEnemyNextIntent(updated, updated.turnCount);
-  }
-
-  return { enemy: updated, hpDamage, blocked };
-}
-
-function triggerRotburstIfNeeded(
-  enemies: EnemyInstance[],
-  alreadyExploded: Set<string>,
-  events: FloatingText[]
-): { enemies: EnemyInstance[]; explosionDamage: number } {
-  let updated = [...enemies];
-  let changed = true;
-  let explosionDamage = 0;
-
-  while (changed) {
-    changed = false;
-    for (const dead of updated) {
-      if (dead.hp <= 0 && dead.statuses.rotburst && !alreadyExploded.has(dead.uid)) {
-        alreadyExploded.add(dead.uid);
-        changed = true;
-        const boomDmg = dead.maxHp;
-        updated = updated.map((other) => {
-          if (other.uid === dead.uid || other.hp <= 0) return other;
-          const res = damageEnemy(other, boomDmg, 0);
-          explosionDamage += res.hpDamage;
-          events.push({
-            id: `${Date.now()}_${Math.random()}`,
-            targetUid: other.uid,
-            msg: { key: 'damage', n: boomDmg },
-            tone: 'poison',
-          });
-          return res.enemy;
-        });
-      }
-    }
-  }
-  return { enemies: updated, explosionDamage };
-}
-
-// Boss Phase 2 awakens at <= 50% HP. Called after every damage source
-// (cards, Rotburst, potions, poison ticks, Cinder Hourglass) so no
-// damage type can skip the transition.
-function applyBossPhase2IfNeeded(
-  enemy: EnemyInstance,
-  events: FloatingText[],
-  log: CombatLogEntry[]
-): EnemyInstance {
-  if (
-    !enemy.isBoss ||
-    enemy.bossPhase2Triggered ||
-    enemy.hp <= 0 ||
-    enemy.hp > Math.floor(enemy.maxHp / 2)
-  ) {
-    return enemy;
-  }
-  log.push({ key: 'logBossPhase2', ref: enemy.defId, name: enemy.name });
-  events.push({
-    id: `${Date.now()}_boss_p2_${enemy.uid}`,
-    targetUid: enemy.uid,
-    msg: { key: 'bossPhase2' },
-    tone: 'buff',
-  });
-  return {
-    ...enemy,
-    bossPhase2Triggered: true,
-    block: enemy.block + 10,
-    statuses: {
-      ...enemy.statuses,
-      strength: enemy.statuses.strength + 2,
-      thorns: enemy.statuses.thorns + 1,
-    },
-  };
-}
-
-function applyBossPhase2ToAll(
-  enemies: EnemyInstance[],
-  events: FloatingText[],
-  log: CombatLogEntry[]
-): EnemyInstance[] {
-  return enemies.map((e) => applyBossPhase2IfNeeded(e, events, log));
-}
+// ---------------------------------------------------------------------------
+// Combat resolution
+// ---------------------------------------------------------------------------
 
 function finalizeCombatIfWon(
   state: RunState,
@@ -580,8 +431,8 @@ function finalizeCombatIfWon(
   }
 
   const gold = combat.isEliteFight
-    ? 28 + Math.floor(Math.random() * 12)
-    : 12 + Math.floor(Math.random() * 10);
+    ? 28 + Math.floor(rng() * 12)
+    : 12 + Math.floor(rng() * 10);
 
   const cardChoices = rollCardChoices(state.heroId, 3, combat.isEliteFight, state.rarePity || 0);
   const offeredRare = cardChoices.some((c) => CARD_DEFS[c.defId]?.rarity === 'rare');
@@ -594,7 +445,7 @@ function finalizeCombatIfWon(
     cardClaimed: false,
     relic: combat.isEliteFight ? rollRelic(state.relics.map((r) => r.id)) : undefined,
     relicClaimed: false,
-    potion: Math.random() < (combat.isEliteFight ? 0.6 : 0.38) ? rollPotion() : undefined,
+    potion: rng() < (combat.isEliteFight ? 0.6 : 0.38) ? rollPotion() : undefined,
     potionClaimed: false,
   };
 
@@ -612,19 +463,38 @@ function finalizeCombatIfWon(
   };
 }
 
+/** Commit a player action: stats, then death or victory checks. */
+function finishPlayerAction(
+  state: RunState,
+  ctx: CombatCtx,
+  extraStats?: (s: RunStats) => RunStats
+): CombatActionResult {
+  let stats = ctx.commitStats(state.stats);
+  if (extraStats) stats = extraStats(stats);
+  if (ctx.hp <= 0) {
+    return {
+      state: { ...state, hp: 0, phase: 'DEFEAT', combat: null, stats },
+      events: ctx.events,
+    };
+  }
+  return finalizeCombatIfWon({ ...state, hp: ctx.hp, stats }, ctx.withCounters(), ctx.events);
+}
+
+/** True when the player may act (their turn, nothing pending). */
+function canAct(combat: CombatState | null): combat is CombatState {
+  return Boolean(combat && !combat.pendingDiscard && !combat.enemyTurnInProgress);
+}
+
 export function playCard(
   state: RunState,
   cardUid: string,
   targetEnemyUid?: string
 ): CombatActionResult {
   const combat = state.combat;
-  if (!combat || combat.pendingDiscard || combat.enemyTurnInProgress) {
-    return { state, events: [] };
-  }
+  if (!canAct(combat)) return { state, events: [] };
 
-  const cardIdx = combat.hand.findIndex((c) => c.uid === cardUid);
-  if (cardIdx === -1) return { state, events: [] };
-  const card = combat.hand[cardIdx];
+  const card = combat.hand.find((c) => c.uid === cardUid);
+  if (!card) return { state, events: [] };
   const def = CARD_DEFS[card.defId];
   if (!def) return { state, events: [] };
 
@@ -633,382 +503,213 @@ export function playCard(
   const actualCost = cost === -1 ? combat.energy : cost;
   if (combat.energy < actualCost) return { state, events: [] };
 
-  const livingEnemies = combat.enemies.filter((e) => e.hp > 0);
   if (def.target === 'enemy') {
-    const target = livingEnemies.find((e) => e.uid === targetEnemyUid) || (livingEnemies.length === 1 ? livingEnemies[0] : undefined);
+    const living = combat.enemies.filter((e) => e.hp > 0);
+    const target = living.find((e) => e.uid === targetEnemyUid) || (living.length === 1 ? living[0] : undefined);
     if (!target) return { state, events: [] };
     targetEnemyUid = target.uid;
   }
 
-  const events: FloatingText[] = [];
-  let nextHp = state.hp;
-  let nextCombat: CombatState = {
-    ...combat,
-    energy: combat.energy - actualCost,
-    hand: combat.hand.filter((c) => c.uid !== cardUid),
-    discardPile: [...combat.discardPile],
-    exhaustPile: [...combat.exhaustPile],
-    playerStatuses: { ...combat.playerStatuses },
-    enemies: combat.enemies.map((e) => ({ ...e, statuses: { ...e.statuses } })),
-    cardsPlayedThisTurn: combat.cardsPlayedThisTurn + 1,
-    attacksPlayedThisTurn:
-      def.type === 'attack' ? combat.attacksPlayedThisTurn + 1 : combat.attacksPlayedThisTurn,
-    log: [...combat.log],
-  };
+  const ctx = new CombatCtx(state);
+  const c = ctx.combat;
+  c.energy -= actualCost;
+  c.hand = c.hand.filter((x) => x.uid !== cardUid);
+  c.cardsPlayedThisTurn += 1;
+  if (def.type === 'attack') c.attacksPlayedThisTurn += 1;
 
-  // Marrow Ache curse check in remaining hand
-  let hpLostThisAction = 0;
-  let hpHealedThisAction = 0;
-  let blockGainedThisAction = 0;
-  let blockedThisAction = 0;
-  const acheCount = nextCombat.hand.filter((c) => CARD_DEFS[c.defId]?.achingCurse).length;
+  // Marrow Ache: lose 1 HP per curse still in hand.
+  const acheCount = c.hand.filter((x) => CARD_DEFS[x.defId]?.achingCurse).length;
   if (acheCount > 0) {
-    const loss = Math.min(nextHp, acheCount);
-    nextHp = Math.max(0, nextHp - acheCount);
-    hpLostThisAction += loss;
-    events.push({ id: `${Date.now()}_ache`, targetUid: 'player', msg: { key: 'curseAche', n: acheCount }, tone: 'damage' });
+    ctx.loseHp(acheCount);
+    ctx.emit('player', { key: 'curseAche', n: acheCount }, 'damage');
   }
 
-  // Self HP loss (Blood Surge / Blood Covenant)
-  if (def.loseHp) {
-    const loss = Math.min(nextHp, def.loseHp);
-    nextHp = Math.max(0, nextHp - def.loseHp);
-    hpLostThisAction += loss;
-    events.push({ id: `${Date.now()}_hp`, targetUid: 'player', msg: { key: 'damage', n: def.loseHp }, tone: 'damage' });
-  }
-
-  // Gain Energy
-  const gainE = card.upgraded && def.upgradedGainEnergy !== undefined ? def.upgradedGainEnergy : def.gainEnergy || 0;
-  if (gainE > 0) {
-    nextCombat.energy += gainE;
-    events.push({ id: `${Date.now()}_eng`, targetUid: 'player', msg: { key: 'gainEnergy', n: gainE }, tone: 'buff' });
-  }
-
-  // Gain Block
-  const blkPreview = calculateCardBlockPreview(card, state);
-  let playerBlocked = false;
-  if (blkPreview.block > 0) {
-    nextCombat.playerBlock += blkPreview.block;
-    blockGainedThisAction += blkPreview.block;
-    playerBlocked = true;
-    events.push({ id: `${Date.now()}_blk`, targetUid: 'player', msg: { key: 'gainBlock', n: blkPreview.block }, tone: 'block' });
-  }
-
-  // Self Status Gains
-  const gainStr = card.upgraded && def.upgradedGainStrength !== undefined ? def.upgradedGainStrength : def.gainStrength || 0;
-  if (gainStr > 0) {
-    nextCombat.playerStatuses.strength += gainStr;
-    events.push({ id: `${Date.now()}_str`, targetUid: 'player', msg: { key: 'gainStrength', n: gainStr }, tone: 'buff' });
-  }
-  const gainDex = card.upgraded && def.upgradedGainDexterity !== undefined ? def.upgradedGainDexterity : def.gainDexterity || 0;
-  if (gainDex > 0) {
-    nextCombat.playerStatuses.dexterity += gainDex;
-    events.push({ id: `${Date.now()}_dex`, targetUid: 'player', msg: { key: 'gainDexterity', n: gainDex }, tone: 'buff' });
-  }
-  const gainMet = card.upgraded && def.upgradedGainIronhide !== undefined ? def.upgradedGainIronhide : def.gainIronhide || 0;
-  if (gainMet > 0) {
-    nextCombat.playerStatuses.ironhide += gainMet;
-    events.push({ id: `${Date.now()}_met`, targetUid: 'player', msg: { key: 'gainIronhide', n: gainMet }, tone: 'buff' });
-  }
-  const gainArt = card.upgraded && def.upgradedGainArtifact !== undefined ? def.upgradedGainArtifact : def.gainArtifact || 0;
-  if (gainArt > 0) {
-    nextCombat.playerStatuses.artifact += gainArt;
-    events.push({ id: `${Date.now()}_art`, targetUid: 'player', msg: { key: 'gainArtifact', n: gainArt }, tone: 'buff' });
-  }
-  if (def.gainShade) nextCombat.playerStatuses.shade += def.gainShade;
-  if (def.bastion) nextCombat.playerStatuses.bastion = true;
-  if (def.doubleNextTurn) nextCombat.playerStatuses.doubleDamageNextTurn = true;
-
-  const avatar = card.upgraded && def.upgradedInfernalAvatar !== undefined ? def.upgradedInfernalAvatar : def.infernalAvatar || 0;
-  if (avatar > 0) nextCombat.playerStatuses.infernalAvatar += avatar;
-
-  const miasma = card.upgraded && def.upgradedMiasma !== undefined ? def.upgradedMiasma : def.miasma || 0;
-  if (miasma > 0) nextCombat.playerStatuses.miasma += miasma;
-
-  if (def.venomEdge) nextCombat.playerStatuses.venomEdge += def.venomEdge;
-
-  // Cinderhorn Brute enrage trigger when playing a Skill card
+  // Cinderhorn Brute: gains Strength whenever a Skill is played.
   if (def.type === 'skill') {
-    nextCombat.enemies = nextCombat.enemies.map((e) => {
+    c.enemies = c.enemies.map((e) => {
       if (e.hp > 0 && e.enraged) {
-        events.push({ id: `${Date.now()}_brute`, targetUid: e.uid, msg: { key: 'enrage', n: 2 }, tone: 'buff' });
+        ctx.emit(e.uid, { key: 'enrage', n: 2 }, 'buff');
         return { ...e, statuses: { ...e.statuses, strength: e.statuses.strength + 2 } };
       }
       return e;
     });
   }
 
-  // Damage & Debuffs to Enemies
-  let totalDealtThisCard = 0;
-  let totalLifesteal = 0;
-  const hitEnemyUids: string[] = [];
+  const play = newPlayInfo(card, def, targetEnemyUid, actualCost);
+  play.temperPerHit = temperPerHitFor(def, card.upgraded, ctx.combat);
+  runEffects(ctx, getCardEffects(def), play);
 
-  const targetIndices =
-    def.target === 'all_enemies'
-      ? nextCombat.enemies.map((e, idx) => (e.hp > 0 ? idx : -1)).filter((i) => i >= 0)
-      : def.target === 'enemy'
-      ? [nextCombat.enemies.findIndex((e) => e.uid === targetEnemyUid)].filter((i) => i >= 0)
-      : [];
-
-  for (const idx of targetIndices) {
-    let enemy = nextCombat.enemies[idx];
-    const targetPreview = calculateCardDamagePreview(card, state, enemy);
-    const hits = def.cost === -1 ? actualCost : targetPreview.hits;
-
-    if ((def.damage !== undefined || def.blockAsDamage) && hits > 0) {
-      hitEnemyUids.push(enemy.uid);
-      for (let h = 0; h < hits; h++) {
-        if (enemy.hp <= 0) break;
-        const dmgRes = damageEnemy(enemy, targetPreview.perHit, nextCombat.playerStatuses.venomEdge);
-        enemy = dmgRes.enemy;
-        totalDealtThisCard += dmgRes.hpDamage;
-        if (def.lifesteal) totalLifesteal += dmgRes.hpDamage;
-        events.push({
-          id: `${Date.now()}_d_${idx}_${h}`,
-          targetUid: enemy.uid,
-          msg: dmgRes.blocked ? { key: 'blocked' } : { key: 'damage', n: dmgRes.hpDamage },
-          tone: dmgRes.blocked ? 'block' : 'damage',
-        });
-
-        // Thorns reflection
-        if (enemy.statuses.thorns > 0) {
-          const thornDmg = enemy.statuses.thorns;
-          if (nextCombat.playerBlock >= thornDmg) {
-            nextCombat.playerBlock -= thornDmg;
-            blockedThisAction += thornDmg;
-          } else {
-            blockedThisAction += nextCombat.playerBlock;
-            const rem = thornDmg - nextCombat.playerBlock;
-            nextCombat.playerBlock = 0;
-            hpLostThisAction += Math.min(nextHp, rem);
-            nextHp = Math.max(0, nextHp - rem);
-          }
-          events.push({ id: `${Date.now()}_th_${h}`, targetUid: 'player', msg: { key: 'thorns', n: thornDmg }, tone: 'damage' });
-        }
-      }
-    }
-
-    // Apply debuffs if enemy still alive
-    if (enemy.hp > 0) {
-      const vuln = card.upgraded && def.upgradedApplyVulnerable !== undefined ? def.upgradedApplyVulnerable : def.applyVulnerable || 0;
-      if (vuln > 0) {
-        const res = applyDebuffToStatuses(enemy.statuses, 'vulnerable', vuln);
-        enemy.statuses = res.statuses;
-        events.push({
-          id: `${Date.now()}_v_${idx}`,
-          targetUid: enemy.uid,
-          msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyVulnerable', n: vuln },
-          tone: 'debuff',
-        });
-      }
-
-      const weak = card.upgraded && def.upgradedApplyWeak !== undefined ? def.upgradedApplyWeak : def.applyWeak || 0;
-      if (weak > 0) {
-        const res = applyDebuffToStatuses(enemy.statuses, 'weak', weak);
-        enemy.statuses = res.statuses;
-        events.push({
-          id: `${Date.now()}_w_${idx}`,
-          targetUid: enemy.uid,
-          msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyWeak', n: weak },
-          tone: 'debuff',
-        });
-      }
-
-      const poison = card.upgraded && def.upgradedApplyPoison !== undefined ? def.upgradedApplyPoison : def.applyPoison || 0;
-      if (poison > 0) {
-        const res = applyDebuffToStatuses(enemy.statuses, 'poison', poison);
-        enemy.statuses = res.statuses;
-        events.push({
-          id: `${Date.now()}_p_${idx}`,
-          targetUid: enemy.uid,
-          msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyPoison', n: poison },
-          tone: 'poison',
-        });
-      }
-
-      const dblPoison = card.upgraded && def.upgradedDoublePoison !== undefined ? def.upgradedDoublePoison : def.doublePoison || 0;
-      if (dblPoison > 0 && enemy.statuses.poison > 0) {
-        const added = enemy.statuses.poison * (dblPoison - 1);
-        enemy.statuses = { ...enemy.statuses, poison: enemy.statuses.poison * dblPoison };
-        events.push({ id: `${Date.now()}_dp_${idx}`, targetUid: enemy.uid, msg: { key: 'applyPoison', n: added }, tone: 'poison' });
-      }
-
-      if (def.rotburst) {
-        enemy.statuses = { ...enemy.statuses, rotburst: true };
-        events.push({ id: `${Date.now()}_ce_${idx}`, targetUid: enemy.uid, msg: { key: 'rotburstMark' }, tone: 'poison' });
-      }
-    }
-
-    nextCombat.enemies[idx] = enemy;
+  if (def.type === 'attack') {
+    if (play.temperPerHit > 0) ctx.combat.temperPending = 0;
+    runHooks(ctx, 'attackPlayed', { card });
   }
 
-  // Notched Blade & Fleet Ribbon relic triggers after every 3rd attack resolves
-  if (def.type === 'attack' && nextCombat.attacksPlayedThisTurn % 3 === 0) {
-    if (hasRelic(state.relics, 'notched_blade')) {
-      nextCombat.playerStatuses.strength += 1;
-      events.push({ id: `${Date.now()}_shur`, targetUid: 'player', msg: { key: 'notchedBlade', n: 1 }, tone: 'buff' });
-    }
-    if (hasRelic(state.relics, 'fleet_ribbon')) {
-      nextCombat.playerStatuses.dexterity += 1;
-      events.push({ id: `${Date.now()}_kuna`, targetUid: 'player', msg: { key: 'fleetRibbon', n: 1 }, tone: 'buff' });
-    }
+  ctx.dmgPoison += ctx.rotburstChain();
+  ctx.checkBossStates();
+
+  if (play.lifesteal > 0) {
+    const healed = ctx.heal(play.lifesteal);
+    if (healed > 0) ctx.emit('player', { key: 'heal', n: healed }, 'heal');
   }
 
-  // Trigger Rotburst chain if any marked enemy died
-  const ceRes = triggerRotburstIfNeeded(nextCombat.enemies, new Set(), events);
-  nextCombat.enemies = applyBossPhase2ToAll(ceRes.enemies, events, nextCombat.log);
-
-  // Lifesteal heal
-  if (totalLifesteal > 0) {
-    const healed = Math.min(totalLifesteal, state.maxHp - nextHp);
-    nextHp += healed;
-    hpHealedThisAction += healed;
-    if (healed > 0) {
-      events.push({ id: `${Date.now()}_ls`, targetUid: 'player', msg: { key: 'heal', n: healed }, tone: 'heal' });
-    }
-  }
-
-  // Draw cards
-  const drawCount = card.upgraded && def.upgradedDraw !== undefined ? def.upgradedDraw : def.draw || 0;
-  if (drawCount > 0) {
-    nextCombat = drawCardsIntoHand(nextCombat, drawCount);
-  }
-  // Tunnel Vision: lock further draws only after its own draw has resolved.
-  if (def.noMoreDraw) {
-    nextCombat = {
-      ...nextCombat,
-      playerStatuses: { ...nextCombat.playerStatuses, noDrawThisTurn: true },
-    };
-  }
-
-  // Add Throwing Knives
-  const knifeCount = card.upgraded && def.upgradedAddKnives !== undefined ? def.upgradedAddKnives : def.addKnives || 0;
-  for (let i = 0; i < knifeCount; i++) {
-    if (nextCombat.hand.length < 10) {
-      nextCombat.hand.push(createCardInstance('throwing_knife', false));
-    } else {
-      nextCombat.discardPile.push(createCardInstance('throwing_knife', false));
-    }
-  }
-
-  // Molten Epiphany: upgrade all cards in combat
-  if (def.upgradeAllInCombat) {
-    nextCombat.hand = nextCombat.hand.map((c) => ({ ...c, upgraded: true }));
-    nextCombat.drawPile = nextCombat.drawPile.map((c) => ({ ...c, upgraded: true }));
-    nextCombat.discardPile = nextCombat.discardPile.map((c) => ({ ...c, upgraded: true }));
-    events.push({ id: `${Date.now()}_apo`, targetUid: 'player', msg: { key: 'upgradeAll' }, tone: 'buff' });
-  }
-
-  // Exhaust vs Discard vs Power
+  // Where the played card goes: powers leave combat, Exhaust cards are removed.
   const shouldExhaust = card.upgraded && def.upgradedExhaust !== undefined ? def.upgradedExhaust : def.exhaust;
   if (def.type === 'power') {
     // Powers leave combat cleanly
   } else if (shouldExhaust) {
-    nextCombat.exhaustPile.push(card);
+    ctx.combat.exhaustPile.push(card);
   } else {
-    nextCombat.discardPile.push(card);
+    ctx.combat.discardPile.push(card);
   }
 
-  // Check Pending Discard (Last Refuge / Sleight of Hand)
-  if (def.discardCount && def.discardCount > 0 && nextCombat.hand.length > 0 && !nextCombat.enemies.every((e) => e.hp <= 0)) {
-    nextCombat.pendingDiscard = {
+  // Discard prompt (Last Refuge, Sleight of Hand, ...)
+  if (play.pendingDiscard > 0 && ctx.combat.hand.length > 0 && !ctx.combat.enemies.every((e) => e.hp <= 0)) {
+    ctx.combat.pendingDiscard = {
       sourceCardUid: card.uid,
-      remaining: Math.min(def.discardCount, nextCombat.hand.length),
+      remaining: Math.min(play.pendingDiscard, ctx.combat.hand.length),
     };
   }
 
-  nextCombat.log.push({ key: 'logPlayCard', ref: def.id, upgraded: card.upgraded });
-  nextCombat.combatDamageDealt = (nextCombat.combatDamageDealt || 0) + totalDealtThisCard + ceRes.explosionDamage;
-  nextCombat.combatDamageBlocked = (nextCombat.combatDamageBlocked || 0) + blockedThisAction;
-  nextCombat.combatDamageTaken = (nextCombat.combatDamageTaken || 0) + hpLostThisAction;
+  ctx.log({ key: 'logPlayCard', ref: def.id, upgraded: card.upgraded });
+  ctx.dmgAttack += play.dealt;
 
-  const prevCardStat = state.stats.damageByCard[def.id] || {
-    defId: def.id,
-    name: def.name,
-    damage: 0,
-    plays: 0,
-  };
-  const updatedCardStats = {
-    ...state.stats.damageByCard,
-    [def.id]: {
-      ...prevCardStat,
-      damage: prevCardStat.damage + totalDealtThisCard,
-      plays: prevCardStat.plays + 1,
-    },
-  };
-
-  const nextCardsByType = {
-    attack: state.stats.cardsByType.attack + (def.type === 'attack' ? 1 : 0),
-    skill: state.stats.cardsByType.skill + (def.type === 'skill' ? 1 : 0),
-    power: state.stats.cardsByType.power + (def.type === 'power' ? 1 : 0),
-  };
-
-  const nextStats = {
-    ...state.stats,
-    cardsPlayed: state.stats.cardsPlayed + 1,
-    totalDamageDealt: state.stats.totalDamageDealt + totalDealtThisCard + ceRes.explosionDamage,
-    attackDamageDealt: state.stats.attackDamageDealt + totalDealtThisCard,
-    poisonDamageDealt: state.stats.poisonDamageDealt + ceRes.explosionDamage,
-    blockGained: state.stats.blockGained + blockGainedThisAction,
-    damageBlocked: state.stats.damageBlocked + blockedThisAction,
-    hpLost: state.stats.hpLost + hpLostThisAction,
-    hpHealed: state.stats.hpHealed + hpHealedThisAction,
-    cardsByType: nextCardsByType,
-    damageByCard: updatedCardStats,
-  };
-
-  // Check Player Death (from Blood Surge / Blood Covenant / Thorns / Marrow Ache)
-  if (nextHp <= 0) {
+  const result = finishPlayerAction(state, ctx, (stats) => {
+    const prev = stats.damageByCard[def.id] || { defId: def.id, name: def.name, damage: 0, plays: 0 };
     return {
-      state: {
-        ...state,
-        hp: 0,
-        phase: 'DEFEAT',
-        combat: null,
-        stats: nextStats,
+      ...stats,
+      cardsPlayed: stats.cardsPlayed + 1,
+      cardsByType: {
+        attack: stats.cardsByType.attack + (def.type === 'attack' ? 1 : 0),
+        skill: stats.cardsByType.skill + (def.type === 'skill' ? 1 : 0),
+        power: stats.cardsByType.power + (def.type === 'power' ? 1 : 0),
       },
-      events,
-      hitEnemyUids,
-      playerBlocked,
+      damageByCard: {
+        ...stats.damageByCard,
+        [def.id]: { ...prev, damage: prev.damage + play.dealt, plays: prev.plays + 1 },
+      },
     };
-  }
-
-  const updatedState: RunState = {
-    ...state,
-    hp: nextHp,
-    stats: nextStats,
-  };
-
-  const result = finalizeCombatIfWon(updatedState, nextCombat, events);
-  return {
-    ...result,
-    hitEnemyUids,
-    playerBlocked,
-  };
+  });
+  return { ...result, hitEnemyUids: play.hitEnemyUids, playerBlocked: play.playerBlocked };
 }
 
-export function discardSelectedCard(state: RunState, cardUid: string): RunState {
+/**
+ * Resolve one pending discard choice. Echo cards trigger their Echo effect
+ * when discarded this way (the end-of-turn discard does not count).
+ */
+export function discardCard(state: RunState, cardUid: string): CombatActionResult {
   const combat = state.combat;
-  if (!combat || !combat.pendingDiscard) return state;
+  if (!combat || !combat.pendingDiscard) return { state, events: [] };
+  const card = combat.hand.find((c) => c.uid === cardUid);
+  if (!card) return { state, events: [] };
 
-  const idx = combat.hand.findIndex((c) => c.uid === cardUid);
-  if (idx === -1) return state;
+  const ctx = new CombatCtx(state);
+  const c = ctx.combat;
+  const pending = combat.pendingDiscard;
+  c.hand = c.hand.filter((x) => x.uid !== cardUid);
+  c.discardPile.push(card);
 
-  const card = combat.hand[idx];
-  const newHand = combat.hand.filter((c) => c.uid !== cardUid);
-  const newDiscard = [...combat.discardPile, card];
-  const remaining = combat.pendingDiscard.remaining - 1;
+  const def = CARD_DEFS[card.defId];
+  if (def?.echo) {
+    ctx.emit('player', { key: 'echo', ref: def.id }, 'ember');
+    runEffects(ctx, def.echo, newPlayInfo(card, def));
+  }
+  runHooks(ctx, 'discard', { card });
+  ctx.checkBossStates();
 
-  return {
-    ...state,
-    combat: {
-      ...combat,
-      hand: newHand,
-      discardPile: newDiscard,
-      pendingDiscard: remaining > 0 && newHand.length > 0 ? { ...combat.pendingDiscard, remaining } : undefined,
-    },
-  };
+  const remaining = pending.remaining - 1;
+  c.pendingDiscard = remaining > 0 && c.hand.length > 0 ? { ...pending, remaining } : undefined;
+  return finishPlayerAction(state, ctx);
 }
+
+/** Legacy wrapper: resolve a discard choice and return only the new state. */
+export function discardSelectedCard(state: RunState, cardUid: string): RunState {
+  return discardCard(state, cardUid).state;
+}
+
+// ---------------------------------------------------------------------------
+// Ember: Stoke and class abilities
+// ---------------------------------------------------------------------------
+
+export const ABILITY_USES_PER_TURN = 1;
+
+export const CLASS_ABILITY: Record<HeroClassId, { id: 'temper' | 'ash_veil' }> = {
+  ironwarden: { id: 'temper' },
+  shadowweaver: { id: 'ash_veil' },
+};
+
+/** Ember cost of the class ability (tuned in balance.ts). */
+export function abilityCost(): number {
+  return BALANCE.abilityCost;
+}
+
+export function stokesPerTurn(): number {
+  return BALANCE.stokesPerTurn;
+}
+
+export function canStoke(state: RunState): boolean {
+  const c = state.combat;
+  return canAct(c) && (c.stokesThisTurn || 0) < stokesPerTurn() && c.hand.length > 0;
+}
+
+export function canUseAbility(state: RunState): boolean {
+  const c = state.combat;
+  return (
+    canAct(c) &&
+    (c.abilityUsesThisTurn || 0) < ABILITY_USES_PER_TURN &&
+    (c.ember || 0) >= abilityCost() &&
+    c.enemies.some((e) => e.hp > 0)
+  );
+}
+
+/**
+ * Stoke: once per turn, Exhaust a card from your hand to gain 1 Ember. Any card
+ * works, including unplayable statuses and curses. Stoking is not playing, so
+ * Marrow Ache does not trigger.
+ */
+export function stokeCard(state: RunState, cardUid: string): CombatActionResult {
+  if (!canStoke(state)) return { state, events: [] };
+  const card = state.combat!.hand.find((c) => c.uid === cardUid);
+  if (!card) return { state, events: [] };
+
+  const ctx = new CombatCtx(state);
+  const c = ctx.combat;
+  c.hand = c.hand.filter((x) => x.uid !== cardUid);
+  c.exhaustPile.push(card);
+  c.stokesThisTurn += 1;
+  ctx.stokes += 1;
+  ctx.log({ key: 'logStoke', ref: card.defId, upgraded: card.upgraded });
+  ctx.gainEmber(1);
+  runHooks(ctx, 'stoke', { card });
+  ctx.checkBossStates();
+  return finishPlayerAction(state, ctx);
+}
+
+/** Use the hero's class ability (Temper / Ash Veil) by spending Ember. */
+export function useClassAbility(state: RunState): CombatActionResult {
+  if (!canUseAbility(state)) return { state, events: [] };
+  const ability = CLASS_ABILITY[state.heroId];
+
+  const ctx = new CombatCtx(state);
+  const c = ctx.combat;
+  ctx.spendEmber(abilityCost());
+  c.abilityUsesThisTurn += 1;
+  ctx.abilityUses += 1;
+
+  if (ability.id === 'temper') {
+    c.temperPending += 1;
+    c.temperedThisTurn = true;
+    ctx.emit('player', { key: 'temper' }, 'ember');
+  } else {
+    for (const idx of ctx.livingIndices()) ctx.debuffEnemy(idx, 'poison', BALANCE.ashVeilPoison);
+  }
+  ctx.log({ key: 'logAbility', ref: ability.id });
+  ctx.checkBossStates();
+  return finishPlayerAction(state, ctx);
+}
+
+// ---------------------------------------------------------------------------
+// Potions
+// ---------------------------------------------------------------------------
 
 export function usePotion(
   state: RunState,
@@ -1019,15 +720,10 @@ export function usePotion(
   if (!potion) return { state, events: [] };
 
   const nextPotions = [...state.potions];
-  const events: FloatingText[] = [];
-
-  let potionDmg = 0;
-  let potionBlock = 0;
 
   if (potion.id === 'heartblood_elixir') {
     const healed = Math.min(15, state.maxHp - state.hp);
     nextPotions[slotIndex] = null;
-    events.push({ id: `${Date.now()}_hp_pot`, targetUid: 'player', msg: { key: 'heal', n: healed }, tone: 'heal' });
     return {
       state: {
         ...state,
@@ -1035,161 +731,79 @@ export function usePotion(
         potions: nextPotions,
         stats: { ...state.stats, hpHealed: state.stats.hpHealed + healed },
       },
-      events,
+      events: [{ id: `${Date.now()}_hp_pot`, targetUid: 'player', msg: { key: 'heal', n: healed }, tone: 'heal' }],
     };
   }
 
   const combat = state.combat;
   if (!combat || combat.enemyTurnInProgress) return { state, events: [] };
 
-  let nextCombat: CombatState = {
-    ...combat,
-    playerStatuses: { ...combat.playerStatuses },
-    enemies: combat.enemies.map((e) => ({ ...e, statuses: { ...e.statuses } })),
-    log: [...combat.log],
-  };
-
+  const ctx = new CombatCtx(state);
   if (potion.target === 'enemy') {
-    const living = nextCombat.enemies.filter((e) => e.hp > 0);
+    const living = ctx.combat.enemies.filter((e) => e.hp > 0);
     const target = living.find((e) => e.uid === targetEnemyUid) || living[0];
     if (!target) return { state, events: [] };
-    const idx = nextCombat.enemies.findIndex((e) => e.uid === target.uid);
+    const idx = ctx.combat.enemies.findIndex((e) => e.uid === target.uid);
 
     if (potion.id === 'wildfire_flask') {
-      const dmgRes = damageEnemy(target, 20, 0);
-      potionDmg += dmgRes.hpDamage;
-      nextCombat.enemies[idx] = dmgRes.enemy;
-      events.push({ id: `${Date.now()}_fp`, targetUid: target.uid, msg: { key: 'damage', n: dmgRes.hpDamage }, tone: 'damage' });
-      const ceRes = triggerRotburstIfNeeded(nextCombat.enemies, new Set(), events);
-      nextCombat.enemies = ceRes.enemies;
-      potionDmg += ceRes.explosionDamage;
+      const res = ctx.damageEnemyAt(idx, 20);
+      ctx.dmgRelic += res.hpDamage;
+      ctx.emit(target.uid, { key: 'damage', n: res.hpDamage }, 'damage');
+      ctx.dmgRelic += ctx.rotburstChain();
     } else if (potion.id === 'nightshade_vial') {
-      const res = applyDebuffToStatuses(target.statuses, 'poison', 6);
-      nextCombat.enemies[idx] = { ...target, statuses: res.statuses };
-      events.push({
-        id: `${Date.now()}_pp`,
-        targetUid: target.uid,
-        msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyPoison', n: 6 },
-        tone: 'poison',
-      });
+      ctx.debuffEnemy(idx, 'poison', 6);
     }
-  } else {
-    if (potion.id === 'stoneskin_tonic') {
-      nextCombat.playerBlock += 12;
-      potionBlock += 12;
-      events.push({ id: `${Date.now()}_bp`, targetUid: 'player', msg: { key: 'gainBlock', n: 12 }, tone: 'block' });
-    } else if (potion.id === 'berserker_draught') {
-      nextCombat.playerStatuses.strength += 2;
-      events.push({ id: `${Date.now()}_sp`, targetUid: 'player', msg: { key: 'gainStrength', n: 2 }, tone: 'buff' });
-    } else if (potion.id === 'kindling_elixir') {
-      nextCombat.energy += 2;
-      events.push({ id: `${Date.now()}_ep`, targetUid: 'player', msg: { key: 'gainEnergy', n: 2 }, tone: 'buff' });
-    } else if (potion.id === 'haste_tincture') {
-      nextCombat = drawCardsIntoHand(nextCombat, 3);
-      events.push({ id: `${Date.now()}_swp`, targetUid: 'player', msg: { key: 'draw', n: 3 }, tone: 'buff' });
-    }
+  } else if (potion.id === 'stoneskin_tonic') {
+    ctx.gainBlock(12);
+  } else if (potion.id === 'berserker_draught') {
+    ctx.combat.playerStatuses.strength += 2;
+    ctx.emit('player', { key: 'gainStrength', n: 2 }, 'buff');
+  } else if (potion.id === 'kindling_elixir') {
+    ctx.combat.energy += 2;
+    ctx.emit('player', { key: 'gainEnergy', n: 2 }, 'buff');
+  } else if (potion.id === 'haste_tincture') {
+    ctx.drawCards(3);
+    ctx.emit('player', { key: 'draw', n: 3 }, 'buff');
   }
 
-  nextCombat.enemies = applyBossPhase2ToAll(nextCombat.enemies, events, nextCombat.log);
+  ctx.checkBossStates();
   nextPotions[slotIndex] = null;
-  nextCombat.combatDamageDealt = (nextCombat.combatDamageDealt || 0) + potionDmg;
-  nextCombat.log.push({ key: 'logUsePotion', ref: potion.id });
-  const nextState: RunState = {
-    ...state,
-    potions: nextPotions,
-    stats: {
-      ...state.stats,
-      totalDamageDealt: state.stats.totalDamageDealt + potionDmg,
-      relicDamageDealt: state.stats.relicDamageDealt + potionDmg,
-      blockGained: state.stats.blockGained + potionBlock,
-    },
-  };
-  return finalizeCombatIfWon(nextState, nextCombat, events);
+  ctx.log({ key: 'logUsePotion', ref: potion.id });
+  return finishPlayerAction({ ...state, potions: nextPotions }, ctx);
 }
 
+// ---------------------------------------------------------------------------
+// Enemy turn
+// ---------------------------------------------------------------------------
+
 export function resolveEnemyTurn(state: RunState): CombatActionResult {
-  const combat = state.combat;
-  if (!combat) return { state, events: [] };
+  if (!state.combat) return { state, events: [] };
 
-  const events: FloatingText[] = [];
-  let nextHp = state.hp;
-  let nextCombat: CombatState = {
-    ...combat,
-    playerStatuses: { ...combat.playerStatuses },
-    hand: [...combat.hand],
-    discardPile: [...combat.discardPile],
-    exhaustPile: [...combat.exhaustPile],
-    drawPile: [...combat.drawPile],
-    enemies: combat.enemies.map((e) => ({ ...e, statuses: { ...e.statuses } })),
-    log: [...combat.log],
-  };
+  const ctx = new CombatCtx(state);
+  const c = ctx.combat;
 
-  let poisonDmgTurn = 0;
-  let relicDmgTurn = 0;
-  let blockGainedTurn = 0;
-  let damageBlockedTurn = 0;
-  let hpLostTurn = 0;
-
-  // 1. End-of-player-turn effects: Burn damage from hand
-  const burnCount = nextCombat.hand.filter((c) => CARD_DEFS[c.defId]?.endTurnBurn).length;
+  // 1. End of the player's turn: Burn in hand, end-of-turn triggers, discard.
+  const burnCount = c.hand.filter((x) => CARD_DEFS[x.defId]?.endTurnBurn).length;
   if (burnCount > 0) {
     const burnDmg = burnCount * 2;
-    if (nextCombat.playerBlock >= burnDmg) {
-      nextCombat.playerBlock -= burnDmg;
-      damageBlockedTurn += burnDmg;
-    } else {
-      damageBlockedTurn += nextCombat.playerBlock;
-      const rem = burnDmg - nextCombat.playerBlock;
-      nextCombat.playerBlock = 0;
-      hpLostTurn += Math.min(nextHp, rem);
-      nextHp = Math.max(0, nextHp - rem);
-    }
-    events.push({ id: `${Date.now()}_burn`, targetUid: 'player', msg: { key: 'burn', n: burnDmg }, tone: 'damage' });
+    ctx.damagePlayer(burnDmg);
+    ctx.emit('player', { key: 'burn', n: burnDmg }, 'damage');
   }
 
-  // Cinderglass Ward relic & Ironhide power
-  if (hasRelic(state.relics, 'cinderglass_ward') && nextCombat.playerBlock === 0) {
-    nextCombat.playerBlock += 6;
-    blockGainedTurn += 6;
-    events.push({ id: `${Date.now()}_ori`, targetUid: 'player', msg: { key: 'cinderglassWard', n: 6 }, tone: 'block' });
-  }
-  if (nextCombat.playerStatuses.ironhide > 0) {
-    nextCombat.playerBlock += nextCombat.playerStatuses.ironhide;
-    blockGainedTurn += nextCombat.playerStatuses.ironhide;
-    events.push({
-      id: `${Date.now()}_met_end`,
-      targetUid: 'player',
-      msg: { key: 'gainBlock', n: nextCombat.playerStatuses.ironhide },
-      tone: 'block',
-    });
-  }
+  runHooks(ctx, 'turnEnd');
 
   // Discard hand (Ethereal cards exhaust)
-  for (const card of nextCombat.hand) {
-    if (CARD_DEFS[card.defId]?.ethereal) {
-      nextCombat.exhaustPile.push(card);
-    } else {
-      nextCombat.discardPile.push(card);
-    }
+  for (const card of c.hand) {
+    if (CARD_DEFS[card.defId]?.ethereal) c.exhaustPile.push(card);
+    else c.discardPile.push(card);
   }
-  nextCombat.hand = [];
-  nextCombat.pendingDiscard = undefined;
+  c.hand = [];
+  c.pendingDiscard = undefined;
 
-  if (nextHp <= 0) {
+  if (ctx.hp <= 0) {
     return {
-      state: {
-        ...state,
-        hp: 0,
-        phase: 'DEFEAT',
-        combat: null,
-        stats: {
-          ...state.stats,
-          blockGained: state.stats.blockGained + blockGainedTurn,
-          damageBlocked: state.stats.damageBlocked + damageBlockedTurn,
-          hpLost: state.stats.hpLost + hpLostTurn,
-        },
-      },
-      events,
+      state: { ...state, hp: 0, phase: 'DEFEAT', combat: null, stats: ctx.commitStats(state.stats) },
+      events: ctx.events,
       hitPlayer: true,
     };
   }
@@ -1199,31 +813,29 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
   // are "just applied" and last a full round (otherwise 1-stack debuffs from
   // enemies would expire before ever mattering).
   const debuffsBeforeEnemyTurn = {
-    vulnerable: nextCombat.playerStatuses.vulnerable,
-    weak: nextCombat.playerStatuses.weak,
-    frail: nextCombat.playerStatuses.frail,
+    vulnerable: c.playerStatuses.vulnerable,
+    weak: c.playerStatuses.weak,
+    frail: c.playerStatuses.frail,
   };
 
-  // 2. Enemy Turn Execution
-  let hitPlayer = false;
-  const explodedSet = new Set<string>();
-
-  for (let i = 0; i < nextCombat.enemies.length; i++) {
-    let enemy = nextCombat.enemies[i];
+  // 2. Enemies act in order.
+  for (let i = 0; i < ctx.combat.enemies.length; i++) {
+    let enemy = ctx.combat.enemies[i];
     if (enemy.hp <= 0) continue;
 
     // Poison ticks at start of enemy turn (ignores block!)
     if (enemy.statuses.poison > 0) {
       const pDmg = Math.min(enemy.hp, enemy.statuses.poison);
-      poisonDmgTurn += pDmg;
+      ctx.dmgPoison += pDmg;
       enemy.hp = Math.max(0, enemy.hp - pDmg);
       enemy.statuses.poison = Math.max(0, enemy.statuses.poison - 1);
-      events.push({ id: `${Date.now()}_pt_${i}`, targetUid: enemy.uid, msg: { key: 'poisonTick', n: pDmg }, tone: 'poison' });
+      if (enemy.charge && !enemy.charge.interrupted) {
+        enemy.charge = { ...enemy.charge, progress: enemy.charge.progress + pDmg };
+      }
+      ctx.emit(enemy.uid, { key: 'poisonTick', n: pDmg }, 'poison');
       if (enemy.hp <= 0) {
-        nextCombat.enemies[i] = enemy;
-        const ceRes = triggerRotburstIfNeeded(nextCombat.enemies, explodedSet, events);
-        nextCombat.enemies = ceRes.enemies;
-        poisonDmgTurn += ceRes.explosionDamage;
+        ctx.combat.enemies[i] = enemy;
+        ctx.dmgPoison += ctx.rotburstChain();
         continue;
       }
     }
@@ -1237,28 +849,31 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     }
     // A poison tick may have pushed the boss to half HP; check after the block
     // reset so the phase-2 block survives into the player's next turn.
-    enemy = applyBossPhase2IfNeeded(enemy, events, nextCombat.log);
+    enemy = applyBossPhase2IfNeeded(enemy, ctx.events, ctx.combat.log);
+    // The poison tick right before a charged attack counts toward interrupting it.
+    const interrupted = applyChargeInterruptIfNeeded(enemy, ctx.events, ctx.combat.log);
+    if (interrupted) {
+      enemy = interrupted;
+      ctx.interrupts += 1;
+    }
 
     const intent = enemy.intent;
+    const wasCharging = Boolean(enemy.charge);
+    if (intent.type === 'stunned') {
+      ctx.emit(enemy.uid, { key: 'stunned' }, 'debuff');
+    }
 
     // Attack
     if (intent.damage !== undefined && intent.damage > 0) {
-      const preview = calculateEnemyAttackPreview(enemy, { ...state, combat: nextCombat });
+      const preview = calculateEnemyAttackPreview(enemy, { ...state, combat: ctx.combat });
       for (let h = 0; h < preview.hits; h++) {
-        if (nextHp <= 0) break;
-        const raw = preview.perHit;
-        if (nextCombat.playerBlock >= raw) {
-          nextCombat.playerBlock -= raw;
-          damageBlockedTurn += raw;
-          events.push({ id: `${Date.now()}_eb_${i}_${h}`, targetUid: 'player', msg: { key: 'blocked' }, tone: 'block' });
+        if (ctx.hp <= 0) break;
+        const res = ctx.damagePlayer(preview.perHit);
+        if (res.fullyBlocked) {
+          ctx.emit('player', { key: 'blocked' }, 'block');
         } else {
-          damageBlockedTurn += nextCombat.playerBlock;
-          const hpDmg = raw - nextCombat.playerBlock;
-          nextCombat.playerBlock = 0;
-          hpLostTurn += Math.min(nextHp, hpDmg);
-          nextHp = Math.max(0, nextHp - hpDmg);
-          hitPlayer = true;
-          events.push({ id: `${Date.now()}_eh_${i}_${h}`, targetUid: 'player', msg: { key: 'damage', n: hpDmg }, tone: 'damage' });
+          ctx.hitPlayer = true;
+          ctx.emit('player', { key: 'damage', n: res.hpDamage }, 'damage');
         }
       }
     }
@@ -1266,17 +881,17 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     // Enemy Block
     if (intent.block) {
       enemy.block += intent.block;
-      events.push({ id: `${Date.now()}_eblk_${i}`, targetUid: enemy.uid, msg: { key: 'gainBlock', n: intent.block }, tone: 'block' });
+      ctx.emit(enemy.uid, { key: 'gainBlock', n: intent.block }, 'block');
     }
 
     // Enemy Buffs
     if (intent.gainStrength) {
       enemy.statuses.strength += intent.gainStrength;
-      events.push({ id: `${Date.now()}_estr_${i}`, targetUid: enemy.uid, msg: { key: 'gainStrength', n: intent.gainStrength }, tone: 'buff' });
+      ctx.emit(enemy.uid, { key: 'gainStrength', n: intent.gainStrength }, 'buff');
     }
     if (intent.gainZeal) {
       enemy.statuses.zeal += intent.gainZeal;
-      events.push({ id: `${Date.now()}_erit_${i}`, targetUid: enemy.uid, msg: { key: 'gainZeal', n: intent.gainZeal }, tone: 'buff' });
+      ctx.emit(enemy.uid, { key: 'gainZeal', n: intent.gainZeal }, 'buff');
     }
     if (intent.gainIronhide) {
       enemy.statuses.ironhide += intent.gainIronhide;
@@ -1284,59 +899,53 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     }
 
     // Enemy Debuffs on Player
-    if (intent.applyVulnerable) {
-      const res = applyDebuffToStatuses(nextCombat.playerStatuses, 'vulnerable', intent.applyVulnerable);
-      nextCombat.playerStatuses = res.statuses;
-      events.push({
-        id: `${Date.now()}_pv_${i}`,
-        targetUid: 'player',
-        msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyVulnerable', n: intent.applyVulnerable },
-        tone: 'debuff',
-      });
-    }
-    if (intent.applyWeak) {
-      const res = applyDebuffToStatuses(nextCombat.playerStatuses, 'weak', intent.applyWeak);
-      nextCombat.playerStatuses = res.statuses;
-      events.push({
-        id: `${Date.now()}_pw_${i}`,
-        targetUid: 'player',
-        msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyWeak', n: intent.applyWeak },
-        tone: 'debuff',
-      });
-    }
-    if (intent.applyFrail) {
-      const res = applyDebuffToStatuses(nextCombat.playerStatuses, 'frail', intent.applyFrail);
-      nextCombat.playerStatuses = res.statuses;
-      events.push({
-        id: `${Date.now()}_pf_${i}`,
-        targetUid: 'player',
-        msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyFrail', n: intent.applyFrail },
-        tone: 'debuff',
-      });
+    for (const [key, amount, msgKey] of [
+      ['vulnerable', intent.applyVulnerable, 'applyVulnerable'],
+      ['weak', intent.applyWeak, 'applyWeak'],
+      ['frail', intent.applyFrail, 'applyFrail'],
+    ] as const) {
+      if (!amount) continue;
+      const ps = ctx.combat.playerStatuses;
+      if (ps.artifact > 0) {
+        ps.artifact -= 1;
+        ctx.emit('player', { key: 'artifactBlocked' }, 'debuff');
+      } else {
+        ps[key] += amount;
+        ctx.emit('player', { key: msgKey, n: amount }, 'debuff');
+      }
     }
     if (intent.addStatusCardId && intent.addStatusCount) {
       for (let k = 0; k < intent.addStatusCount; k++) {
         const statusCard = createCardInstance(intent.addStatusCardId, false);
         if (intent.statusToDrawPile) {
-          const pos = Math.floor(Math.random() * (nextCombat.drawPile.length + 1));
-          nextCombat.drawPile.splice(pos, 0, statusCard);
+          const pos = Math.floor(rng() * (ctx.combat.drawPile.length + 1));
+          ctx.combat.drawPile.splice(pos, 0, statusCard);
         } else {
-          nextCombat.discardPile.push(statusCard);
+          ctx.combat.discardPile.push(statusCard);
         }
       }
-      events.push({
-        id: `${Date.now()}_sc_${i}`,
-        targetUid: 'player',
-        msg: {
+      ctx.emit(
+        'player',
+        {
           key: intent.statusToDrawPile ? 'statusCardsDraw' : 'statusCards',
           n: intent.addStatusCount,
           ref: intent.addStatusCardId,
         },
-        tone: 'debuff',
-      });
+        'debuff'
+      );
     }
     if (intent.grantsEnrage) {
       enemy.enraged = true;
+    }
+
+    // A charge resolves on the action after it started: fired or interrupted.
+    if (wasCharging) {
+      if (!enemy.charge!.interrupted) ctx.chargesFired += 1;
+      enemy.charge = undefined;
+    }
+    if (intent.startsCharge) {
+      enemy.charge = { threshold: bossChargeThreshold(state.ascension), progress: 0, interrupted: false };
+      ctx.emit(enemy.uid, { key: 'chargeStart', n: enemy.charge.threshold }, 'buff');
     }
 
     // End of enemy turn: Zeal grants Strength, decrement enemy Vulnerable/Weak
@@ -1352,128 +961,65 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       enemy.asleep = false;
     }
     enemy.intent = computeEnemyNextIntent(enemy, enemy.turnCount);
-    nextCombat.enemies[i] = enemy;
+    ctx.combat.enemies[i] = enemy;
   }
 
-  nextCombat.combatDamageDealt = (nextCombat.combatDamageDealt || 0) + poisonDmgTurn;
-  nextCombat.combatDamageBlocked = (nextCombat.combatDamageBlocked || 0) + damageBlockedTurn;
-  nextCombat.combatDamageTaken = (nextCombat.combatDamageTaken || 0) + hpLostTurn;
-
-  const midStats = {
-    ...state.stats,
-    totalDamageDealt: state.stats.totalDamageDealt + poisonDmgTurn,
-    poisonDamageDealt: state.stats.poisonDamageDealt + poisonDmgTurn,
-    blockGained: state.stats.blockGained + blockGainedTurn,
-    damageBlocked: state.stats.damageBlocked + damageBlockedTurn,
-    hpLost: state.stats.hpLost + hpLostTurn,
-  };
-
-  // Check if enemies died from Poison or Rotburst
-  const wonCheck = finalizeCombatIfWon({ ...state, hp: nextHp, stats: midStats }, nextCombat, events);
+  // Enemies may have died to Poison or Rotburst during their own turn.
+  const wonCheck = finalizeCombatIfWon(
+    { ...state, hp: ctx.hp, stats: ctx.commitStats(state.stats) },
+    ctx.withCounters(),
+    ctx.events
+  );
   if (wonCheck.state.phase !== 'COMBAT') {
-    return { ...wonCheck, hitPlayer };
+    return { ...wonCheck, hitPlayer: ctx.hitPlayer };
   }
 
-  if (nextHp <= 0) {
+  if (ctx.hp <= 0) {
     return {
-      state: { ...state, hp: 0, phase: 'DEFEAT', combat: null, stats: midStats },
-      events,
+      state: { ...state, hp: 0, phase: 'DEFEAT', combat: null, stats: ctx.commitStats(state.stats) },
+      events: ctx.events,
       hitPlayer: true,
     };
   }
 
-  // 3. Start of Player's Next Turn
-  nextCombat = wonCheck.state.combat!;
-  nextCombat.turn += 1;
-  nextCombat.energy = nextCombat.maxEnergy;
-  nextCombat.attacksPlayedThisTurn = 0;
-  nextCombat.cardsPlayedThisTurn = 0;
-  nextCombat.playerStatuses.noDrawThisTurn = false;
+  // 3. Start of the player's next turn.
+  const n = ctx.combat;
+  n.turn += 1;
+  n.energy = n.maxEnergy;
+  n.attacksPlayedThisTurn = 0;
+  n.cardsPlayedThisTurn = 0;
+  n.playerStatuses.noDrawThisTurn = false;
+  n.stokesThisTurn = 0;
+  n.abilityUsesThisTurn = 0;
+  n.temperPending = 0;
+  n.temperedThisTurn = false;
 
   // Player Block preservation check (Bastion or Shade)
-  if (!nextCombat.playerStatuses.bastion) {
-    if (nextCombat.playerStatuses.shade > 0) {
-      nextCombat.playerStatuses.shade -= 1;
+  if (!n.playerStatuses.bastion) {
+    if (n.playerStatuses.shade > 0) {
+      n.playerStatuses.shade -= 1;
     } else {
-      nextCombat.playerBlock = 0;
+      n.playerBlock = 0;
     }
   }
 
-  let turnStartBlock = 0;
-  // Watchman's Horn relic on Turn 2
-  if (nextCombat.turn === 2 && hasRelic(state.relics, 'watchman_horn')) {
-    nextCombat.playerBlock += 14;
-    turnStartBlock += 14;
-    events.push({ id: `${Date.now()}_hc`, targetUid: 'player', msg: { key: 'watchmanHorn', n: 14 }, tone: 'block' });
-  }
-
-  // Night Terror double damage activation
-  if (nextCombat.playerStatuses.doubleDamageNextTurn) {
-    nextCombat.doubleDamageActive = true;
-    nextCombat.playerStatuses.doubleDamageNextTurn = false;
-    events.push({ id: `${Date.now()}_pk`, targetUid: 'player', msg: { key: 'nightTerror' }, tone: 'buff' });
-  } else {
-    nextCombat.doubleDamageActive = false;
-  }
-
-  // Infernal Avatar & Creeping Miasma & Cinder Hourglass
-  if (nextCombat.playerStatuses.infernalAvatar > 0) {
-    nextCombat.playerStatuses.strength += nextCombat.playerStatuses.infernalAvatar;
-    events.push({
-      id: `${Date.now()}_df`,
-      targetUid: 'player',
-      msg: { key: 'infernalAvatar', n: nextCombat.playerStatuses.infernalAvatar },
-      tone: 'buff',
-    });
-  }
-  if (nextCombat.playerStatuses.miasma > 0) {
-    const nf = nextCombat.playerStatuses.miasma;
-    nextCombat.enemies = nextCombat.enemies.map((e) => {
-      if (e.hp <= 0) return e;
-      const res = applyDebuffToStatuses(e.statuses, 'poison', nf);
-      events.push({
-        id: `${Date.now()}_nf_${e.uid}`,
-        targetUid: e.uid,
-        msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyPoison', n: nf },
-        tone: 'poison',
-      });
-      return { ...e, statuses: res.statuses };
-    });
-  }
-  if (hasRelic(state.relics, 'cinder_hourglass')) {
-    nextCombat.enemies = nextCombat.enemies.map((e) => {
-      if (e.hp <= 0) return e;
-      const d = Math.min(e.hp, 3);
-      relicDmgTurn += d;
-      return { ...e, hp: Math.max(0, e.hp - 3) };
-    });
-    const ceRelic = triggerRotburstIfNeeded(nextCombat.enemies, explodedSet, events);
-    nextCombat.enemies = applyBossPhase2ToAll(ceRelic.enemies, events, nextCombat.log);
-    relicDmgTurn += ceRelic.explosionDamage;
-  }
+  runHooks(ctx, 'turnStart');
 
   // Decrement player debuffs that were already active before this enemy turn
-  if (debuffsBeforeEnemyTurn.vulnerable > 0) nextCombat.playerStatuses.vulnerable -= 1;
-  if (debuffsBeforeEnemyTurn.weak > 0) nextCombat.playerStatuses.weak -= 1;
-  if (debuffsBeforeEnemyTurn.frail > 0) nextCombat.playerStatuses.frail -= 1;
+  const ps = ctx.combat.playerStatuses;
+  if (debuffsBeforeEnemyTurn.vulnerable > 0) ps.vulnerable -= 1;
+  if (debuffsBeforeEnemyTurn.weak > 0) ps.weak -= 1;
+  if (debuffsBeforeEnemyTurn.frail > 0) ps.frail -= 1;
 
-  // Draw 5 cards
-  nextCombat = drawCardsIntoHand(nextCombat, 5);
-  nextCombat.combatDamageDealt = (nextCombat.combatDamageDealt || 0) + relicDmgTurn;
+  ctx.drawCards(5);
 
-  const endStats = {
-    ...midStats,
-    totalDamageDealt: midStats.totalDamageDealt + relicDmgTurn,
-    relicDamageDealt: midStats.relicDamageDealt + relicDmgTurn,
-    blockGained: midStats.blockGained + turnStartBlock,
-  };
-
-  // Check if Cinder Hourglass killed remaining enemies
-  const finalCheck = finalizeCombatIfWon({ ...state, hp: nextHp, stats: endStats }, nextCombat, events);
-  return {
-    ...finalCheck,
-    hitPlayer,
-  };
+  // Cinder Hourglass may have killed the remaining enemies.
+  const finalCheck = finalizeCombatIfWon(
+    { ...state, hp: ctx.hp, stats: ctx.commitStats(state.stats) },
+    ctx.withCounters(),
+    ctx.events
+  );
+  return { ...finalCheck, hitPlayer: ctx.hitPlayer };
 }
 
 export function addPotionToSlot(

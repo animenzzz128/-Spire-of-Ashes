@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Flame,
+  Hammer,
   Heart,
   Layers,
   Moon,
+  Wind,
+  ZapOff,
   ScrollText,
   Shield,
   Skull,
@@ -12,7 +15,14 @@ import {
   Zap,
 } from 'lucide-react';
 import { CARD_DEFS, getCardCost } from '../game/cards';
-import { calculateEnemyAttackPreview } from '../game/engine';
+import {
+  abilityCost,
+  calculateEnemyAttackPreview,
+  canStoke,
+  canUseAbility,
+  CLASS_ABILITY,
+  stokesPerTurn,
+} from '../game/engine';
 import { HERO_CLASSES } from '../game/heroes';
 import {
   HERO_EN,
@@ -54,6 +64,8 @@ interface CombatArenaViewProps {
   onUsePotionOnEnemy: (slotIndex: number, enemyUid: string) => void;
   onEndTurn: () => void;
   onCardHoverSound: () => void;
+  onStokeCard: (cardUid: string) => void;
+  onUseAbility: () => void;
 }
 
 function getCombatSceneTheme(state: RunState, isElite: boolean, isBoss: boolean, locale: Locale) {
@@ -225,6 +237,24 @@ function renderStatusTags(statuses: StatusMap, locale: Locale) {
       title: zh ? '未格挡的攻击伤害附加中毒' : 'Unblocked attack hits apply Poison',
     });
   }
+  if ((statuses.forgeHeart || 0) > 0) {
+    items.push({
+      label: zh ? '锻炉' : 'Forge Heart',
+      value: statuses.forgeHeart!,
+      tone: 'text-orange-200 border-orange-400/50 bg-orange-950/60',
+      title: zh ? `每次添薪获得 ${statuses.forgeHeart} 点格挡` : `Gain ${statuses.forgeHeart} Block whenever you Stoke`,
+    });
+  }
+  if ((statuses.smolderingHaze || 0) > 0) {
+    items.push({
+      label: zh ? '烟霭' : 'Haze',
+      value: statuses.smolderingHaze!,
+      tone: 'text-orange-200 border-emerald-500/40 bg-emerald-950/60',
+      title: zh
+        ? `每花 1 点余烬，给予所有敌人 ${statuses.smolderingHaze} 层中毒`
+        : `Each Ember spent applies ${statuses.smolderingHaze} Poison to ALL enemies`,
+    });
+  }
   if (statuses.rotburst) {
     items.push({
       label: zh ? '腐爆' : 'Rotburst',
@@ -363,6 +393,8 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
   onUsePotionOnEnemy,
   onEndTurn,
   onCardHoverSound,
+  onStokeCard,
+  onUseAbility,
 }) => {
   const combat = state.combat;
   const copy = UI_COPY[locale];
@@ -379,6 +411,8 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
   const [portraitFailed, setPortraitFailed] = useState(false);
   const [bgFailed, setBgFailed] = useState(false);
   const [pointerOffset, setPointerOffset] = useState({ x: 0, y: 0 });
+  // Stoke mode: the next hand card clicked is burned for Ember instead of played.
+  const [stokeMode, setStokeMode] = useState(false);
 
   // Hand row width, used to overlap cards so the whole hand fits on one row.
   // A callback ref attaches the observer whenever the row element mounts.
@@ -415,6 +449,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
 
   useEffect(() => {
     setSelectedCardUid(null);
+    setStokeMode(false);
   }, [combat?.turn, combat?.hand.length]);
 
   useEffect(() => {
@@ -427,7 +462,24 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
       if (!combat || combat.enemyTurnInProgress || inspectPile) return;
       if (e.key === 'Escape') {
         setSelectedCardUid(null);
+        setStokeMode(false);
         onCancelPendingPotion();
+        return;
+      }
+      // B: Stoke the hovered card, or toggle Stoke mode. Q: class ability.
+      if (e.key === 'b' || e.key === 'B') {
+        if (!canStoke(state)) return;
+        const hovered = combat.hand.find((c) => c.uid === hoveredCardUid);
+        if (hovered) {
+          onStokeCard(hovered.uid);
+          setStokeMode(false);
+        } else {
+          setStokeMode((m) => !m);
+        }
+        return;
+      }
+      if (e.key === 'q' || e.key === 'Q') {
+        if (canUseAbility(state)) onUseAbility();
         return;
       }
       if ((e.key === 'e' || e.key === 'E' || e.key === ' ') && !combat.pendingDiscard) {
@@ -446,6 +498,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
           return;
         }
         handleCardClick(card);
+        return;
       }
     };
     window.addEventListener('keydown', handler);
@@ -491,6 +544,11 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
 
   const handleCardClick = (card: CardInstance) => {
     if (combat.enemyTurnInProgress) return;
+    if (stokeMode) {
+      onStokeCard(card.uid);
+      setStokeMode(false);
+      return;
+    }
     if (combat.pendingDiscard) {
       onDiscardCard(card.uid);
       return;
@@ -603,6 +661,17 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
         >
           <Shield className="h-3.5 w-3.5 text-sky-400" />
           <span>{locale === 'zh' ? '防御强化' : 'Defend'}</span>
+        </div>
+      );
+    }
+    if (intent.type === 'stunned') {
+      return (
+        <div
+          title={intentText}
+          className="flex items-center gap-1.5 rounded-lg border border-violet-400/50 bg-violet-950/85 px-3 py-1 text-xs font-semibold text-violet-100"
+        >
+          <ZapOff className="h-3.5 w-3.5 text-violet-300" />
+          <span>{locale === 'zh' ? '过载失衡' : 'Overloaded'}</span>
         </div>
       );
     }
@@ -744,9 +813,21 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
       </div>
 
       {/* Prompt Banners for Targeting / Discarding */}
-      {(isTargetingEnemy || combat.pendingDiscard) && (
+      {(isTargetingEnemy || combat.pendingDiscard || stokeMode) && (
         <div className="relative z-20 mx-auto mt-2 flex items-center gap-3 rounded-lg border border-amber-400/50 bg-[#171d29]/95 px-4 py-2 text-sm text-amber-200 shadow-lg">
-          {combat.pendingDiscard ? (
+          {stokeMode ? (
+            <>
+              <Flame className="h-4 w-4 text-orange-400" />
+              <span>{copy.stokePrompt}</span>
+              <button
+                type="button"
+                onClick={() => setStokeMode(false)}
+                className="rounded border border-white/20 px-2 py-0.5 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"
+              >
+                {copy.cancel} (Esc)
+              </button>
+            </>
+          ) : combat.pendingDiscard ? (
             <span>
               {copy.chooseDiscardPrefix}{' '}
               <strong className="text-white">{combat.pendingDiscard.remaining}</strong>{' '}
@@ -817,6 +898,8 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                         ? 'text-sky-300'
                         : ft.tone === 'heal'
                         ? 'text-emerald-300'
+                        : ft.tone === 'ember'
+                        ? 'text-orange-400'
                         : 'text-amber-300'
                     }`}
                   >
@@ -1043,6 +1126,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                 {!dead && (
                   <div className="mb-2 flex flex-col items-center gap-1">
                     {renderIntent(enemy)}
+                    {enemy.charge && <ChargeBar charge={enemy.charge} locale={locale} />}
                     <span className="text-[11px] text-slate-300 max-w-[190px] truncate drop-shadow">
                       {intentSubtitle}
                     </span>
@@ -1139,7 +1223,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
       {/* Bottom Hand & Controls Bar */}
       <div className="relative z-20 border-t border-white/10 bg-[#0d1118]/92 px-4 py-4 backdrop-blur-md sm:px-6">
         <div className="mx-auto flex max-w-[1440px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          {/* Left: Energy & Draw Pile */}
+          {/* Left: Energy & Ember */}
           <div className="flex items-center justify-between gap-4 lg:justify-start">
             <div className="flex items-center gap-3">
               <div className="flex h-14 w-14 flex-col items-center justify-center rounded-xl border border-amber-400/60 bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.3)]">
@@ -1154,17 +1238,14 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setInspectPile('draw')}
-              className="flex items-center gap-2 rounded-lg border border-white/12 bg-[#161c26] px-3.5 py-2 text-xs font-medium text-slate-200 hover:border-sky-400/50 cursor-pointer"
-            >
-              <Layers className="h-4 w-4 text-sky-400" />
-              <span>{copy.drawPile}</span>
-              <span className="font-mono-num font-bold text-white">
-                {combat.drawPile.length}
-              </span>
-            </button>
+            <EmberPanel
+              state={state}
+              locale={locale}
+              stokeMode={stokeMode}
+              onToggleStoke={() => setStokeMode((m) => !m)}
+              onUseAbility={onUseAbility}
+            />
+
           </div>
 
           {/* Center: Hand of Cards + Drop zone */}
@@ -1202,6 +1283,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                   targetEnemy={previewEnemy}
                   selected={selectedCardUid === card.uid}
                   discardMode={Boolean(combat.pendingDiscard)}
+                  stokeMode={stokeMode}
                   shortcutNumber={idx < 9 ? idx + 1 : undefined}
                   draggableCard={!combat.enemyTurnInProgress}
                   onMouseEnter={() => {
@@ -1235,6 +1317,17 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
             )}
             <div className="flex items-center justify-between gap-3 lg:justify-end">
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInspectPile('draw')}
+                  className="flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#161c26] px-3 py-2 text-xs text-slate-200 hover:border-sky-400/50 cursor-pointer"
+                >
+                  <Layers className="h-3.5 w-3.5 text-sky-400" />
+                  <span>{copy.drawPile}</span>
+                  <span className="font-mono-num font-bold text-white">
+                    {combat.drawPile.length}
+                  </span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setInspectPile('discard')}
@@ -1315,6 +1408,121 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
           onClose={() => setInspectPile(null)}
         />
       )}
+    </div>
+  );
+};
+
+/** Interrupt progress for a charged enemy attack. */
+const ChargeBar: React.FC<{ charge: NonNullable<EnemyInstance['charge']>; locale: Locale }> = ({ charge, locale }) => {
+  const copy = UI_COPY[locale];
+  const pct = Math.min(100, (charge.progress / charge.threshold) * 100);
+  const need = Math.max(0, charge.threshold - charge.progress);
+  return (
+    <div
+      className="w-44 rounded-md border border-orange-400/40 bg-[#1a1210]/90 px-2 py-1 text-[10.5px] text-orange-100 shadow"
+      data-testid="charge-bar"
+    >
+      <div className="mb-0.5 flex items-center justify-between font-semibold">
+        <span>{copy.chargeTitle}</span>
+        <span className="font-mono-num">
+          {Math.min(charge.progress, charge.threshold)}/{charge.threshold}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+        <div
+          className={`h-full transition-all duration-300 ${
+            charge.interrupted ? 'bg-violet-400' : 'bg-gradient-to-r from-orange-600 to-amber-300'
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className={`mt-0.5 text-center ${charge.interrupted ? 'text-violet-200 font-bold' : 'text-orange-200'}`}>
+        {charge.interrupted ? copy.chargeInterrupted : copy.chargeNeed(need)}
+      </div>
+    </div>
+  );
+};
+
+/** Ember gauge, Stoke toggle and the class ability button. */
+const EmberPanel: React.FC<{
+  state: RunState;
+  locale: Locale;
+  stokeMode: boolean;
+  onToggleStoke: () => void;
+  onUseAbility: () => void;
+}> = ({ state, locale, stokeMode, onToggleStoke, onUseAbility }) => {
+  const copy = UI_COPY[locale];
+  const combat = state.combat!;
+  const ember = combat.ember || 0;
+  const cap = combat.emberCap || 10;
+  const ability = CLASS_ABILITY[state.heroId];
+  const stokeAvailable = canStoke(state);
+  const abilityAvailable = canUseAbility(state);
+  const stokedOut = (combat.stokesThisTurn || 0) >= stokesPerTurn();
+  const abilityUsed = (combat.abilityUsesThisTurn || 0) > 0;
+  const AbilityIcon = ability.id === 'temper' ? Hammer : Wind;
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="ember-panel">
+      <div className="flex items-center gap-2" title={copy.emberTip}>
+        <span className="text-xs font-semibold text-orange-200">{copy.ember}</span>
+        <div className="flex gap-0.5" aria-label={`${copy.ember} ${ember}/${cap}`}>
+          {Array.from({ length: cap }, (_, i) => (
+            <Flame
+              key={i}
+              className={`h-3.5 w-3.5 transition-colors ${
+                i < ember
+                  ? ember >= cap
+                    ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.9)]'
+                    : 'text-orange-400'
+                  : 'text-slate-700'
+              }`}
+            />
+          ))}
+        </div>
+        <span className="font-mono-num text-xs font-bold text-orange-100" data-testid="ember-count">
+          {ember}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onToggleStoke}
+          disabled={!stokeAvailable && !stokeMode}
+          title={copy.stokeTip}
+          data-testid="stoke-btn"
+          className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+            stokeMode
+              ? 'border-orange-300 bg-orange-500 text-slate-950'
+              : 'border-orange-500/50 bg-orange-950/60 text-orange-200 hover:border-orange-300'
+          }`}
+        >
+          <Flame className="h-3.5 w-3.5" />
+          {stokedOut ? copy.stokeUsed : copy.stokeBtn}
+        </button>
+        <button
+          type="button"
+          onClick={onUseAbility}
+          disabled={!abilityAvailable}
+          title={copy.abilityDescs[ability.id]}
+          data-testid="ability-btn"
+          className="flex items-center gap-1 rounded-lg border border-amber-400/50 bg-amber-950/60 px-2.5 py-1 text-xs font-semibold text-amber-100 hover:border-amber-300 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <AbilityIcon className="h-3.5 w-3.5" />
+          <span>{copy.abilityNames[ability.id]}</span>
+          <span className="flex items-center font-mono-num text-orange-300">
+            {abilityCost()}
+            <Flame className="h-3 w-3" />
+          </span>
+        </button>
+        {(combat.temperPending || 0) > 0 && (
+          <span className="rounded border border-amber-300/60 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+            {copy.temperReady}
+          </span>
+        )}
+      </div>
+      <div className="text-[10px] text-slate-500">
+        {abilityUsed ? `${copy.abilityNames[ability.id]} · ${copy.abilityUsed}` : copy.emberKeyHint}
+      </div>
     </div>
   );
 };
