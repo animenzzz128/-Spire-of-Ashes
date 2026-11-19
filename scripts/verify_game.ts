@@ -4,6 +4,7 @@ import {
   addPotionToSlot,
   calculateCardBlockPreview,
   calculateCardDamagePreview,
+  calculateEnemyAttackPreview,
   createNewRun,
   discardPotionSlot,
   discardSelectedCard,
@@ -18,10 +19,14 @@ import {
   POTION_EN,
   RELIC_EN,
   tCard,
+  tCombatLogEntry,
+  tCombatMsg,
   tIntentLabel,
   tPotion,
   tRelic,
 } from '../src/game/i18n';
+import { resolveEventOption } from '../src/game/events';
+import { CombatMsg, CombatMsgKey } from '../src/game/types';
 import { POTION_DEFS } from '../src/game/potions';
 import { RELIC_DEFS } from '../src/game/relics';
 import { generateSpireMap, TOTAL_FLOORS } from '../src/game/map';
@@ -147,6 +152,9 @@ function testCombatMechanicsAndStats() {
   sw.combat!.enemies[0].block = 0;
   sw.combat!.enemies[1].hp = 30;
   sw.combat!.enemies[1].maxHp = 30;
+  // A cloned sleeping Lagavulin would inherit its 8 starting block and make
+  // this check fail whenever the random elite roll is Lagavulin.
+  sw.combat!.enemies[1].block = 0;
 
   const ce = createCardInstance('corpse_explosion', false);
   const cat = createCardInstance('catalyst', true);
@@ -225,7 +233,136 @@ function testBilingualCoverage() {
   );
 }
 
+function testP0Regressions() {
+  // 1. Battle Trance draws its cards, then locks further draws this turn
+  let bt = createNewRun('ironwarden', 0);
+  bt = startCombat(bt, 'monster', 1);
+  const trance = createCardInstance('battle_trance', false);
+  const pommel = createCardInstance('pommel_strike', false);
+  bt.combat!.hand = [trance, pommel];
+  bt.combat!.drawPile = Array.from({ length: 8 }, () => createCardInstance('iron_strike'));
+  bt.combat!.discardPile = [];
+  bt.combat!.energy = 3;
+  bt = playCard(bt, trance.uid).state;
+  assert.equal(bt.combat!.hand.length, 4, 'Battle Trance must draw 3 cards');
+  assert.equal(bt.combat!.playerStatuses.noDrawThisTurn, true);
+  bt = playCard(bt, pommel.uid, bt.combat!.enemies[0].uid).state;
+  assert.equal(bt.combat!.hand.length, 3, 'No further draws after Battle Trance');
+  console.log('✓ Battle Trance draw order passed');
+
+  // 2. A 1-stack Vulnerable applied by an enemy must survive to its next attack
+  let vr = createNewRun('ironwarden', 0);
+  vr = startCombat(vr, 'monster', 8);
+  const base = vr.combat!.enemies[0];
+  vr.combat!.enemies = [
+    {
+      ...base,
+      defId: 'bone_knight',
+      hp: 999,
+      maxHp: 999,
+      block: 0,
+      asleep: false,
+      turnCount: 3,
+      statuses: { ...base.statuses, strength: 0, thorns: 0, metallicize: 0, ritual: 0, weak: 0 },
+      intent: { type: 'debuff', applyFrail: 2, applyVulnerable: 1, label: 'test' },
+    },
+  ];
+  vr.combat!.hand = [];
+  vr.combat!.playerBlock = 0;
+  const afterDebuff = resolveEnemyTurn(vr).state;
+  assert.equal(afterDebuff.combat!.playerStatuses.vulnerable, 1, 'Vulnerable 1 must still be active on the player turn');
+  assert.equal(afterDebuff.combat!.playerStatuses.frail, 2);
+  const knight = afterDebuff.combat!.enemies[0];
+  assert.equal(knight.intent.damage, 9);
+  assert.equal(calculateEnemyAttackPreview(knight, afterDebuff).perHit, 13, '9 x 1.5 Vulnerable = 13');
+  afterDebuff.combat!.hand = [];
+  afterDebuff.combat!.playerBlock = 0;
+  const afterHit = resolveEnemyTurn(afterDebuff).state;
+  assert.equal(afterDebuff.hp - afterHit.hp, 13, 'Next enemy attack must be boosted by Vulnerable');
+  assert.equal(afterHit.combat!.playerStatuses.vulnerable, 0, 'Vulnerable 1 expires after one full round');
+  assert.equal(afterHit.combat!.playerStatuses.frail, 1);
+  console.log('✓ Enemy-applied debuff duration passed');
+
+  // 3. Boss phase 2 must trigger from poison, not only from card hits
+  let bp = createNewRun('shadowweaver', 0);
+  bp = startCombat(bp, 'boss', 15);
+  const boss = bp.combat!.enemies[0];
+  boss.hp = 125;
+  boss.statuses.artifact = 0;
+  boss.statuses.poison = 10;
+  bp.combat!.hand = [];
+  const bpAfter = resolveEnemyTurn(bp).state.combat!.enemies[0];
+  assert.equal(bpAfter.hp, 115);
+  assert.equal(bpAfter.bossPhase2Triggered, true, 'Poison crossing 50% HP must trigger boss phase 2');
+  assert.ok(bpAfter.block >= 16, 'Phase 2 block must survive into the player turn');
+  console.log('✓ Boss phase 2 from poison passed');
+
+  // 4. Wandering smith upgrades 2 random cards, not always the first two
+  const upgradedSlots = new Set<string>();
+  for (let t = 0; t < 60; t++) {
+    let s = createNewRun('ironwarden', 0);
+    s = { ...s, gold: 200, event: { id: 'wandering_smith', title: '', body: '', options: [], resolved: false } };
+    const out = resolveEventOption(s, 'forge_random');
+    const idx = out.deck.map((c, i) => (c.upgraded ? i : -1)).filter((i) => i >= 0);
+    assert.equal(idx.length, 2, 'Smith upgrades exactly 2 cards');
+    upgradedSlots.add(idx.join(','));
+  }
+  assert.ok(upgradedSlots.size > 1, 'Smith must not always upgrade the same deck slots');
+  console.log('✓ Smith random upgrade passed');
+
+  // 5. Every combat message translates in both locales; English has no CJK
+  const samples = {
+    damage: { n: 5 },
+    blocked: {},
+    gainBlock: { n: 5 },
+    gainStrength: { n: 2 },
+    gainDexterity: { n: 1 },
+    gainMetallicize: { n: 3 },
+    gainArtifact: { n: 1 },
+    gainEnergy: { n: 2 },
+    gainRitual: { n: 3 },
+    pain: { n: 1 },
+    thorns: { n: 2 },
+    burn: { n: 4 },
+    poisonTick: { n: 6 },
+    heal: { n: 6 },
+    draw: { n: 3 },
+    enrage: { n: 2 },
+    artifactBlocked: {},
+    applyVulnerable: { n: 2 },
+    applyWeak: { n: 1 },
+    applyFrail: { n: 2 },
+    applyPoison: { n: 5 },
+    corpseMark: {},
+    shuriken: { n: 1 },
+    kunai: { n: 1 },
+    orichalcum: { n: 6 },
+    hornCleat: { n: 14 },
+    phantasmal: {},
+    demonForm: { n: 2 },
+    apotheosis: {},
+    bossPhase2: {},
+    statusCards: { n: 2, ref: 'wound' },
+    logEnterCombat: { n: 3 },
+    logMercury: { n: 3 },
+    logPlayCard: { ref: 'bash', upgraded: true },
+    logUsePotion: { ref: 'fire_potion' },
+    logBossPhase2: { ref: 'obsidian_warden', name: '黑曜守望者' },
+  } satisfies Record<CombatMsgKey, Omit<CombatMsg, 'key'>>;
+  const cjk = /[一-鿿]/;
+  for (const [key, rest] of Object.entries(samples)) {
+    const msg = { key, ...rest } as CombatMsg;
+    const en = tCombatMsg(msg, 'en');
+    const zh = tCombatMsg(msg, 'zh');
+    assert.ok(en.length > 0 && !cjk.test(en), `English combat message for ${key} must be non-empty and CJK-free: ${en}`);
+    assert.ok(zh.length > 0, `Chinese combat message for ${key} must be non-empty`);
+  }
+  assert.equal(tCombatLogEntry('旧存档日志', 'en'), '旧存档日志', 'Plain-string log entries from old saves still render');
+  console.log(`✓ Combat message i18n passed (${Object.keys(samples).length} message keys)`);
+}
+
 testMapInvariants();
 testCombatMechanicsAndStats();
 testBilingualCoverage();
+testP0Regressions();
 console.log('ALL VERIFICATION CHECKS PASSED');
