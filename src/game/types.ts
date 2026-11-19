@@ -190,10 +190,61 @@ export interface MapNode {
   visited: boolean;
 }
 
+// Locale-neutral combat message. The engine emits these; the UI translates them
+// with tCombatMsg() so floating text and the combat log follow the language toggle.
+export type CombatMsgKey =
+  | 'damage'
+  | 'blocked'
+  | 'gainBlock'
+  | 'gainStrength'
+  | 'gainDexterity'
+  | 'gainMetallicize'
+  | 'gainArtifact'
+  | 'gainEnergy'
+  | 'gainRitual'
+  | 'pain'
+  | 'thorns'
+  | 'burn'
+  | 'poisonTick'
+  | 'heal'
+  | 'draw'
+  | 'enrage'
+  | 'artifactBlocked'
+  | 'applyVulnerable'
+  | 'applyWeak'
+  | 'applyFrail'
+  | 'applyPoison'
+  | 'corpseMark'
+  | 'shuriken'
+  | 'kunai'
+  | 'orichalcum'
+  | 'hornCleat'
+  | 'phantasmal'
+  | 'demonForm'
+  | 'apotheosis'
+  | 'bossPhase2'
+  | 'statusCards'
+  | 'logEnterCombat'
+  | 'logMercury'
+  | 'logPlayCard'
+  | 'logUsePotion'
+  | 'logBossPhase2';
+
+export interface CombatMsg {
+  key: CombatMsgKey;
+  n?: number;
+  ref?: string; // card / potion / enemy def id
+  name?: string; // Chinese display-name fallback for ref
+  upgraded?: boolean;
+}
+
+// Saves made before CombatMsg existed hold plain Chinese strings; keep reading them.
+export type CombatLogEntry = string | CombatMsg;
+
 export interface FloatingText {
   id: string;
   targetUid: string; // 'player' or enemy uid
-  text: string;
+  msg: CombatMsg;
   tone: 'damage' | 'block' | 'heal' | 'poison' | 'buff' | 'debuff';
 }
 
@@ -236,7 +287,7 @@ export interface CombatState {
   combatDamageDealt?: number;
   combatDamageBlocked?: number;
   combatDamageTaken?: number;
-  log: string[];
+  log: CombatLogEntry[];
 }
 
 export interface RewardState {

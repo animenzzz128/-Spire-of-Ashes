@@ -1,7 +1,7 @@
 import { CARD_DEFS } from './cards';
 import { POTION_DEFS } from './potions';
 import { RELIC_DEFS } from './relics';
-import { EnemyIntent, HeroClassId, NodeType } from './types';
+import { CombatLogEntry, CombatMsg, EnemyIntent, HeroClassId, NodeType } from './types';
 
 export type Locale = 'zh' | 'en';
 
@@ -509,4 +509,103 @@ export function tPotion(id: string, locale: Locale) {
 export function tEnemyName(defId: string, fallbackName: string, locale: Locale): string {
   if (locale === 'zh') return fallbackName;
   return ENEMY_EN[defId]?.name || fallbackName;
+}
+
+// Translates engine combat messages (floating text + combat log).
+export function tCombatMsg(msg: CombatMsg, locale: Locale): string {
+  const zh = locale === 'zh';
+  const n = msg.n ?? 0;
+  switch (msg.key) {
+    case 'damage':
+      return `-${n}`;
+    case 'blocked':
+      return zh ? '格挡' : 'Blocked';
+    case 'gainBlock':
+      return zh ? `+${n} 格挡` : `+${n} Block`;
+    case 'gainStrength':
+      return zh ? `力量 +${n}` : `Strength +${n}`;
+    case 'gainDexterity':
+      return zh ? `敏捷 +${n}` : `Dexterity +${n}`;
+    case 'gainMetallicize':
+      return zh ? `金属化 +${n}` : `Metallicize +${n}`;
+    case 'gainArtifact':
+      return zh ? `人工制品 +${n}` : `Artifact +${n}`;
+    case 'gainEnergy':
+      return zh ? `+${n} 能量` : `+${n} Energy`;
+    case 'gainRitual':
+      return zh ? `仪式 +${n}` : `Ritual +${n}`;
+    case 'pain':
+      return zh ? `-${n} 痛楚` : `-${n} Pain`;
+    case 'thorns':
+      return zh ? `-${n} 荆棘` : `-${n} Thorns`;
+    case 'burn':
+      return zh ? `-${n} 灼伤` : `-${n} Burn`;
+    case 'poisonTick':
+      return zh ? `-${n} 毒` : `-${n} Poison`;
+    case 'heal':
+      return zh ? `+${n} 生命` : `+${n} HP`;
+    case 'draw':
+      return zh ? `抽 ${n} 张牌` : `Draw ${n}`;
+    case 'enrage':
+      return zh ? `狂怒: 力量+${n}` : `Enrage: Strength +${n}`;
+    case 'artifactBlocked':
+      return zh ? '被人工制品抵消' : 'Negated by Artifact';
+    case 'applyVulnerable':
+      return zh ? `易伤 +${n}` : `Vulnerable +${n}`;
+    case 'applyWeak':
+      return zh ? `虚弱 +${n}` : `Weak +${n}`;
+    case 'applyFrail':
+      return zh ? `脆弱 +${n}` : `Frail +${n}`;
+    case 'applyPoison':
+      return zh ? `中毒 +${n}` : `Poison +${n}`;
+    case 'corpseMark':
+      return zh ? '尸爆标记' : 'Corpse Explosion';
+    case 'shuriken':
+      return zh ? `手里剑: 力量+${n}` : `Shuriken: Strength +${n}`;
+    case 'kunai':
+      return zh ? `苦无: 敏捷+${n}` : `Kunai: Dexterity +${n}`;
+    case 'orichalcum':
+      return zh ? `+${n} 奥利哈刚` : `+${n} Orichalcum`;
+    case 'hornCleat':
+      return zh ? `+${n} 羊角格挡` : `+${n} Horn Cleat Block`;
+    case 'phantasmal':
+      return zh ? '幻影绝杀: 伤害翻倍!' : 'Phantasmal: Double damage!';
+    case 'demonForm':
+      return zh ? `恶魔化身: 力量+${n}` : `Demon Form: Strength +${n}`;
+    case 'apotheosis':
+      return zh ? '全牌升华 (+)' : 'All cards upgraded (+)';
+    case 'bossPhase2':
+      return zh ? '二阶段觉醒!' : 'Phase 2 awakens!';
+    case 'statusCards': {
+      const cardName = msg.ref ? tCard(msg.ref, locale).name : '';
+      return zh ? `弃牌堆 +${n} ${cardName}` : `+${n} ${cardName} to discard`;
+    }
+    case 'logEnterCombat':
+      return zh ? `进入第 ${n} 层战斗` : `Entered combat on floor ${n}`;
+    case 'logMercury':
+      return zh
+        ? `水银沙漏：对所有敌人造成 ${n} 点伤害。`
+        : `Mercury Hourglass: dealt ${n} damage to all enemies.`;
+    case 'logPlayCard': {
+      const cardName = msg.ref ? tCard(msg.ref, locale).name : '';
+      const plus = msg.upgraded ? '+' : '';
+      return zh ? `打出【${cardName}${plus}】` : `Played [${cardName}${plus}]`;
+    }
+    case 'logUsePotion': {
+      const potionName = msg.ref ? tPotion(msg.ref, locale).name : '';
+      return zh ? `使用了药水【${potionName}】` : `Used potion [${potionName}]`;
+    }
+    case 'logBossPhase2': {
+      const name = tEnemyName(msg.ref || '', msg.name || '', locale);
+      return zh
+        ? `${name}：熔炉核心超频觉醒！（力量+2、荆棘+2、格挡+16）`
+        : `${name}: forge core overcharged! (Strength +2, Thorns +2, Block +16)`;
+    }
+    default:
+      return '';
+  }
+}
+
+export function tCombatLogEntry(entry: CombatLogEntry, locale: Locale): string {
+  return typeof entry === 'string' ? entry : tCombatMsg(entry, locale);
 }

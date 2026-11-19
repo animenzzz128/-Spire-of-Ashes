@@ -161,7 +161,13 @@ export function resolveEventOption(state: RunState, optionId: string): RunState 
     }
     case 'forge_random': {
       next.gold -= 45;
-      const targets = next.deck.filter((c) => !c.upgraded).slice(0, 2);
+      // Pick 2 random un-upgraded cards (previously always the first two in deck order).
+      const pool = next.deck.filter((c) => !c.upgraded);
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      const targets = pool.slice(0, 2);
       const uids = new Set(targets.map((t) => t.uid));
       next.deck = next.deck.map((c) => (uids.has(c.uid) ? { ...c, upgraded: true } : c));
       outcome = `铁匠挥锤敲击两声，牌组中的 ${targets.length} 张卡牌淬炼升级！`;

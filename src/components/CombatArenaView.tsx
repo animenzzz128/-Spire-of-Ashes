@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Flame,
   Heart,
@@ -19,6 +19,8 @@ import {
   Locale,
   UI_COPY,
   tCard,
+  tCombatLogEntry,
+  tCombatMsg,
   tEnemyName,
   tIntentLabel,
 } from '../game/i18n';
@@ -377,6 +379,39 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
   const [bgFailed, setBgFailed] = useState(false);
   const [pointerOffset, setPointerOffset] = useState({ x: 0, y: 0 });
 
+  // Hand row width, used to overlap cards so the whole hand fits on one row.
+  // A callback ref attaches the observer whenever the row element mounts.
+  const [handWidth, setHandWidth] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window === 'undefined' ? 1440 : window.innerWidth
+  );
+  const handObserver = useRef<ResizeObserver | null>(null);
+  const handEl = useRef<HTMLDivElement | null>(null);
+  const handRef = useCallback((el: HTMLDivElement | null) => {
+    handObserver.current?.disconnect();
+    handObserver.current = null;
+    handEl.current = el;
+    if (!el) return;
+    // Measure immediately; the observer then tracks later size changes.
+    setHandWidth(el.getBoundingClientRect().width);
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(([entry]) => setHandWidth(entry.contentRect.width));
+      ro.observe(el);
+      handObserver.current = ro;
+    }
+  }, []);
+  useEffect(() => {
+    const onResize = () => {
+      setViewportWidth(window.innerWidth);
+      if (handEl.current) setHandWidth(handEl.current.getBoundingClientRect().width);
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      handObserver.current?.disconnect();
+    };
+  }, []);
+
   useEffect(() => {
     setSelectedCardUid(null);
   }, [combat?.turn, combat?.hand.length]);
@@ -442,6 +477,16 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
     return sum + atk.perHit * atk.hits;
   }, 0);
   const netIncomingDamage = Math.max(0, totalIncomingDamage - combat.playerBlock);
+
+  // Single-row hand: cards overlap just enough to fit the measured row width.
+  // CardView is w-40 (160px) below the sm breakpoint and w-44 (176px) from sm up.
+  const handCardWidth = viewportWidth >= 640 ? 176 : 160;
+  const handGap = 12;
+  const handCount = combat.hand.length;
+  const handStep =
+    handCount > 1 && handWidth > 0
+      ? Math.min(handCardWidth + handGap, (handWidth - handCardWidth) / (handCount - 1))
+      : handCardWidth + handGap;
 
   const handleCardClick = (card: CardInstance) => {
     if (combat.enemyTurnInProgress) return;
@@ -774,7 +819,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                         : 'text-amber-300'
                     }`}
                   >
-                    {ft.text}
+                    {tCombatMsg(ft.msg, locale)}
                   </span>
                 ))}
             </div>
@@ -977,7 +1022,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                             : 'text-rose-300'
                         }`}
                       >
-                        {ft.text}
+                        {tCombatMsg(ft.msg, locale)}
                       </span>
                     ))}
                 </div>
@@ -1112,6 +1157,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
 
           {/* Center: Hand of Cards + Drop zone */}
           <div
+            ref={handRef}
             onDragOver={(e) => {
               if (draggingCardUid) e.preventDefault();
             }}
@@ -1125,28 +1171,37 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
               }
               setDraggingCardUid(null);
             }}
-            className="flex flex-1 flex-wrap items-center justify-center gap-2.5 sm:gap-3 py-1"
+            className="flex min-w-0 flex-1 flex-nowrap items-center justify-center py-1"
           >
             {combat.hand.map((card, idx) => (
-              <CardView
+              <div
                 key={card.uid}
-                card={card}
-                locale={locale}
-                state={state}
-                targetEnemy={previewEnemy}
-                selected={selectedCardUid === card.uid}
-                discardMode={Boolean(combat.pendingDiscard)}
-                shortcutNumber={idx < 9 ? idx + 1 : undefined}
-                draggableCard={!combat.enemyTurnInProgress}
-                onMouseEnter={() => {
-                  setHoveredCardUid(card.uid);
-                  onCardHoverSound();
+                className="relative shrink-0"
+                style={{
+                  marginLeft: idx === 0 ? 0 : handStep - handCardWidth,
+                  zIndex:
+                    hoveredCardUid === card.uid || selectedCardUid === card.uid ? 50 : idx + 1,
                 }}
-                onMouseLeave={() => setHoveredCardUid(null)}
-                onDragStart={() => setDraggingCardUid(card.uid)}
-                onDragEnd={() => setDraggingCardUid(null)}
-                onClick={() => handleCardClick(card)}
-              />
+              >
+                <CardView
+                  card={card}
+                  locale={locale}
+                  state={state}
+                  targetEnemy={previewEnemy}
+                  selected={selectedCardUid === card.uid}
+                  discardMode={Boolean(combat.pendingDiscard)}
+                  shortcutNumber={idx < 9 ? idx + 1 : undefined}
+                  draggableCard={!combat.enemyTurnInProgress}
+                  onMouseEnter={() => {
+                    setHoveredCardUid(card.uid);
+                    onCardHoverSound();
+                  }}
+                  onMouseLeave={() => setHoveredCardUid(null)}
+                  onDragStart={() => setDraggingCardUid(card.uid)}
+                  onDragEnd={() => setDraggingCardUid(null)}
+                  onClick={() => handleCardClick(card)}
+                />
+              </div>
             ))}
             {combat.hand.length === 0 && (
               <div className="py-8 text-sm text-slate-500">{copy.emptyHand}</div>
@@ -1213,7 +1268,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
           <ul className="space-y-1 text-slate-400">
             {[...combat.log].reverse().slice(0, 20).map((entry, idx) => (
               <li key={idx} className="border-b border-white/5 pb-1">
-                {entry}
+                {tCombatLogEntry(entry, locale)}
               </li>
             ))}
           </ul>

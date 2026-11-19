@@ -10,7 +10,6 @@ import {
   Map as MapIcon,
   RotateCcw,
   Settings,
-  Shield,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -18,6 +17,17 @@ import { HERO_CLASSES } from '../game/heroes';
 import { HERO_EN, Locale, UI_COPY, tPotion, tRelic } from '../game/i18n';
 import { TOTAL_FLOORS } from '../game/map';
 import { PotionDef, RelicDef, RunState } from '../game/types';
+
+// One CJK character ("燃血徽记" -> "燃") or up to two initials ("Burning Blood" -> "BB").
+function relicGlyph(name: string): string {
+  const trimmed = name.trim();
+  if (/^[一-鿿]/.test(trimmed)) return trimmed[0];
+  return trimmed
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || '')
+    .join('');
+}
 
 interface TopHudBarProps {
   state: RunState;
@@ -62,9 +72,9 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
 
   return (
     <header className="relative z-40 border-b border-white/10 bg-[#0d1118]/95 backdrop-blur-md">
-      <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
+      <div className="mx-auto flex max-w-[1440px] flex-wrap xl:flex-nowrap items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
         {/* Zone 1: Hero & Vital Stats */}
-        <div className="flex flex-wrap items-center gap-3 sm:gap-5">
+        <div className="flex shrink-0 flex-wrap items-center gap-3 sm:gap-5">
           <div className="flex items-center gap-2">
             <span className="font-display text-base font-bold tracking-wide text-amber-400 whitespace-nowrap">
               {heroName}
@@ -150,20 +160,26 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           </div>
         </div>
 
-        {/* Zone 2: Relics Strip */}
-        <div className="hidden xl:flex items-center gap-1.5">
-          <span className="mr-1 text-xs text-slate-400">{copy.relicsLabel}</span>
+        {/* Zone 2: Relics Strip — compact glyph chips so the HUD stays one row;
+            name + description show in the tooltip banner on hover/focus. */}
+        <div className="hidden lg:flex min-w-0 flex-1 items-center justify-center gap-1.5 overflow-x-auto">
+          <span className="mr-1 shrink-0 text-xs text-slate-400">{copy.relicsLabel}</span>
           {state.relics.map((relic) => {
             const rt = tRelic(relic.id, locale);
             return (
               <div
                 key={relic.id}
+                tabIndex={0}
+                aria-label={`${rt.name}: ${rt.desc}`}
                 onMouseEnter={() => setHoveredRelic(relic)}
                 onMouseLeave={() => setHoveredRelic(null)}
-                className="flex h-8 items-center gap-1.5 rounded-md border border-amber-500/25 bg-[#171d28] px-2.5 text-xs text-amber-200 hover:border-amber-400/60 transition-colors cursor-help"
+                onFocus={() => setHoveredRelic(relic)}
+                onBlur={() => setHoveredRelic(null)}
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-[#171d28] font-bold text-amber-200 hover:border-amber-400/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 transition-colors cursor-help ${
+                  relic.rarity === 'starter' ? 'border-amber-400/60' : 'border-amber-500/25'
+                } ${/[一-鿿]/.test(rt.name) ? 'text-sm' : 'text-[11px]'}`}
               >
-                <Shield className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                <span className="whitespace-nowrap">{rt.name}</span>
+                {relicGlyph(rt.name)}
               </div>
             );
           })}

@@ -14,6 +14,7 @@ import { rollPotion } from './potions';
 import { RELIC_DEFS, rollRelic } from './relics';
 import {
   CardInstance,
+  CombatLogEntry,
   CombatState,
   EnemyInstance,
   FloatingText,
@@ -183,7 +184,7 @@ export function startCombat(
     combatDamageDealt: 0,
     combatDamageBlocked: 0,
     combatDamageTaken: 0,
-    log: [`进入第 ${floor} 层战斗`],
+    log: [{ key: 'logEnterCombat', n: floor }],
   };
 
   let initialDraw = 5;
@@ -199,7 +200,7 @@ export function startCombat(
       return { ...e, hp: Math.max(0, e.hp - 3) };
     });
     combat.combatDamageDealt = (combat.combatDamageDealt || 0) + relicDmgStart;
-    combat.log.push('水银沙漏：对所有敌人造成 3 点伤害。');
+    combat.log.push({ key: 'logMercury', n: 3 });
   }
 
   combat = drawCardsIntoHand(combat, initialDraw);
@@ -462,7 +463,7 @@ function triggerCorpseExplosionIfNeeded(
           events.push({
             id: `${Date.now()}_${Math.random()}`,
             targetUid: other.uid,
-            text: `-${boomDmg}`,
+            msg: { key: 'damage', n: boomDmg },
             tone: 'poison',
           });
           return res.enemy;
@@ -471,6 +472,49 @@ function triggerCorpseExplosionIfNeeded(
     }
   }
   return { enemies: updated, explosionDamage };
+}
+
+// Boss Phase 2 awakens at <= 50% HP. Called after every damage source
+// (cards, Corpse Explosion, potions, poison ticks, Mercury Hourglass) so no
+// damage type can skip the transition.
+function applyBossPhase2IfNeeded(
+  enemy: EnemyInstance,
+  events: FloatingText[],
+  log: CombatLogEntry[]
+): EnemyInstance {
+  if (
+    !enemy.isBoss ||
+    enemy.bossPhase2Triggered ||
+    enemy.hp <= 0 ||
+    enemy.hp > Math.floor(enemy.maxHp / 2)
+  ) {
+    return enemy;
+  }
+  log.push({ key: 'logBossPhase2', ref: enemy.defId, name: enemy.name });
+  events.push({
+    id: `${Date.now()}_boss_p2_${enemy.uid}`,
+    targetUid: enemy.uid,
+    msg: { key: 'bossPhase2' },
+    tone: 'buff',
+  });
+  return {
+    ...enemy,
+    bossPhase2Triggered: true,
+    block: enemy.block + 16,
+    statuses: {
+      ...enemy.statuses,
+      strength: enemy.statuses.strength + 2,
+      thorns: enemy.statuses.thorns + 2,
+    },
+  };
+}
+
+function applyBossPhase2ToAll(
+  enemies: EnemyInstance[],
+  events: FloatingText[],
+  log: CombatLogEntry[]
+): EnemyInstance[] {
+  return enemies.map((e) => applyBossPhase2IfNeeded(e, events, log));
 }
 
 function finalizeCombatIfWon(
@@ -613,7 +657,7 @@ export function playCard(
     const loss = Math.min(nextHp, painCount);
     nextHp = Math.max(0, nextHp - painCount);
     hpLostThisAction += loss;
-    events.push({ id: `${Date.now()}_pain`, targetUid: 'player', text: `-${painCount} 痛楚`, tone: 'damage' });
+    events.push({ id: `${Date.now()}_pain`, targetUid: 'player', msg: { key: 'pain', n: painCount }, tone: 'damage' });
   }
 
   // Self HP loss (Bloodletting / Offering)
@@ -621,14 +665,14 @@ export function playCard(
     const loss = Math.min(nextHp, def.loseHp);
     nextHp = Math.max(0, nextHp - def.loseHp);
     hpLostThisAction += loss;
-    events.push({ id: `${Date.now()}_hp`, targetUid: 'player', text: `-${def.loseHp}`, tone: 'damage' });
+    events.push({ id: `${Date.now()}_hp`, targetUid: 'player', msg: { key: 'damage', n: def.loseHp }, tone: 'damage' });
   }
 
   // Gain Energy
   const gainE = card.upgraded && def.upgradedGainEnergy !== undefined ? def.upgradedGainEnergy : def.gainEnergy || 0;
   if (gainE > 0) {
     nextCombat.energy += gainE;
-    events.push({ id: `${Date.now()}_eng`, targetUid: 'player', text: `+${gainE} 能量`, tone: 'buff' });
+    events.push({ id: `${Date.now()}_eng`, targetUid: 'player', msg: { key: 'gainEnergy', n: gainE }, tone: 'buff' });
   }
 
   // Gain Block
@@ -638,34 +682,33 @@ export function playCard(
     nextCombat.playerBlock += blkPreview.block;
     blockGainedThisAction += blkPreview.block;
     playerBlocked = true;
-    events.push({ id: `${Date.now()}_blk`, targetUid: 'player', text: `+${blkPreview.block} 格挡`, tone: 'block' });
+    events.push({ id: `${Date.now()}_blk`, targetUid: 'player', msg: { key: 'gainBlock', n: blkPreview.block }, tone: 'block' });
   }
 
   // Self Status Gains
   const gainStr = card.upgraded && def.upgradedGainStrength !== undefined ? def.upgradedGainStrength : def.gainStrength || 0;
   if (gainStr > 0) {
     nextCombat.playerStatuses.strength += gainStr;
-    events.push({ id: `${Date.now()}_str`, targetUid: 'player', text: `力量 +${gainStr}`, tone: 'buff' });
+    events.push({ id: `${Date.now()}_str`, targetUid: 'player', msg: { key: 'gainStrength', n: gainStr }, tone: 'buff' });
   }
   const gainDex = card.upgraded && def.upgradedGainDexterity !== undefined ? def.upgradedGainDexterity : def.gainDexterity || 0;
   if (gainDex > 0) {
     nextCombat.playerStatuses.dexterity += gainDex;
-    events.push({ id: `${Date.now()}_dex`, targetUid: 'player', text: `敏捷 +${gainDex}`, tone: 'buff' });
+    events.push({ id: `${Date.now()}_dex`, targetUid: 'player', msg: { key: 'gainDexterity', n: gainDex }, tone: 'buff' });
   }
   const gainMet = card.upgraded && def.upgradedGainMetallicize !== undefined ? def.upgradedGainMetallicize : def.gainMetallicize || 0;
   if (gainMet > 0) {
     nextCombat.playerStatuses.metallicize += gainMet;
-    events.push({ id: `${Date.now()}_met`, targetUid: 'player', text: `金属化 +${gainMet}`, tone: 'buff' });
+    events.push({ id: `${Date.now()}_met`, targetUid: 'player', msg: { key: 'gainMetallicize', n: gainMet }, tone: 'buff' });
   }
   const gainArt = card.upgraded && def.upgradedGainArtifact !== undefined ? def.upgradedGainArtifact : def.gainArtifact || 0;
   if (gainArt > 0) {
     nextCombat.playerStatuses.artifact += gainArt;
-    events.push({ id: `${Date.now()}_art`, targetUid: 'player', text: `人工制品 +${gainArt}`, tone: 'buff' });
+    events.push({ id: `${Date.now()}_art`, targetUid: 'player', msg: { key: 'gainArtifact', n: gainArt }, tone: 'buff' });
   }
   if (def.gainBlur) nextCombat.playerStatuses.blur += def.gainBlur;
   if (def.barricade) nextCombat.playerStatuses.barricade = true;
   if (def.doubleNextTurn) nextCombat.playerStatuses.doubleDamageNextTurn = true;
-  if (def.noMoreDraw) nextCombat.playerStatuses.noDrawThisTurn = true;
 
   const demon = card.upgraded && def.upgradedDemonForm !== undefined ? def.upgradedDemonForm : def.demonForm || 0;
   if (demon > 0) nextCombat.playerStatuses.demonForm += demon;
@@ -679,7 +722,7 @@ export function playCard(
   if (def.type === 'skill') {
     nextCombat.enemies = nextCombat.enemies.map((e) => {
       if (e.hp > 0 && e.enraged) {
-        events.push({ id: `${Date.now()}_nob`, targetUid: e.uid, text: '狂怒: 力量+2', tone: 'buff' });
+        events.push({ id: `${Date.now()}_nob`, targetUid: e.uid, msg: { key: 'enrage', n: 2 }, tone: 'buff' });
         return { ...e, statuses: { ...e.statuses, strength: e.statuses.strength + 2 } };
       }
       return e;
@@ -714,7 +757,7 @@ export function playCard(
         events.push({
           id: `${Date.now()}_d_${idx}_${h}`,
           targetUid: enemy.uid,
-          text: dmgRes.blocked ? '格挡' : `-${dmgRes.hpDamage}`,
+          msg: dmgRes.blocked ? { key: 'blocked' } : { key: 'damage', n: dmgRes.hpDamage },
           tone: dmgRes.blocked ? 'block' : 'damage',
         });
 
@@ -731,27 +774,9 @@ export function playCard(
             hpLostThisAction += Math.min(nextHp, rem);
             nextHp = Math.max(0, nextHp - rem);
           }
-          events.push({ id: `${Date.now()}_th_${h}`, targetUid: 'player', text: `-${thornDmg} 荆棘`, tone: 'damage' });
+          events.push({ id: `${Date.now()}_th_${h}`, targetUid: 'player', msg: { key: 'thorns', n: thornDmg }, tone: 'damage' });
         }
       }
-    }
-
-    // Boss Phase 2 Awakening at <= 50% HP
-    if (enemy.isBoss && !enemy.bossPhase2Triggered && enemy.hp > 0 && enemy.hp <= Math.floor(enemy.maxHp / 2)) {
-      enemy.bossPhase2Triggered = true;
-      enemy.statuses = {
-        ...enemy.statuses,
-        strength: enemy.statuses.strength + 2,
-        thorns: enemy.statuses.thorns + 2,
-      };
-      enemy.block += 16;
-      nextCombat.log.push('黑曜守望者：熔炉核心超频觉醒！（力量+2、荆棘+2、格挡+16）');
-      events.push({
-        id: `${Date.now()}_boss_p2`,
-        targetUid: enemy.uid,
-        text: '二阶段觉醒!',
-        tone: 'buff',
-      });
     }
 
     // Apply debuffs if enemy still alive
@@ -763,7 +788,7 @@ export function playCard(
         events.push({
           id: `${Date.now()}_v_${idx}`,
           targetUid: enemy.uid,
-          text: res.blockedByArtifact ? '被人工制品抵消' : `易伤 +${vuln}`,
+          msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyVulnerable', n: vuln },
           tone: 'debuff',
         });
       }
@@ -775,7 +800,7 @@ export function playCard(
         events.push({
           id: `${Date.now()}_w_${idx}`,
           targetUid: enemy.uid,
-          text: res.blockedByArtifact ? '被人工制品抵消' : `虚弱 +${weak}`,
+          msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyWeak', n: weak },
           tone: 'debuff',
         });
       }
@@ -787,7 +812,7 @@ export function playCard(
         events.push({
           id: `${Date.now()}_p_${idx}`,
           targetUid: enemy.uid,
-          text: res.blockedByArtifact ? '被人工制品抵消' : `中毒 +${poison}`,
+          msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyPoison', n: poison },
           tone: 'poison',
         });
       }
@@ -796,12 +821,12 @@ export function playCard(
       if (dblPoison > 0 && enemy.statuses.poison > 0) {
         const added = enemy.statuses.poison * (dblPoison - 1);
         enemy.statuses = { ...enemy.statuses, poison: enemy.statuses.poison * dblPoison };
-        events.push({ id: `${Date.now()}_dp_${idx}`, targetUid: enemy.uid, text: `中毒 +${added}`, tone: 'poison' });
+        events.push({ id: `${Date.now()}_dp_${idx}`, targetUid: enemy.uid, msg: { key: 'applyPoison', n: added }, tone: 'poison' });
       }
 
       if (def.corpseExplosion) {
         enemy.statuses = { ...enemy.statuses, corpseExplosion: true };
-        events.push({ id: `${Date.now()}_ce_${idx}`, targetUid: enemy.uid, text: '尸爆标记', tone: 'poison' });
+        events.push({ id: `${Date.now()}_ce_${idx}`, targetUid: enemy.uid, msg: { key: 'corpseMark' }, tone: 'poison' });
       }
     }
 
@@ -812,17 +837,17 @@ export function playCard(
   if (def.type === 'attack' && nextCombat.attacksPlayedThisTurn % 3 === 0) {
     if (hasRelic(state.relics, 'shuriken')) {
       nextCombat.playerStatuses.strength += 1;
-      events.push({ id: `${Date.now()}_shur`, targetUid: 'player', text: '手里剑: 力量+1', tone: 'buff' });
+      events.push({ id: `${Date.now()}_shur`, targetUid: 'player', msg: { key: 'shuriken', n: 1 }, tone: 'buff' });
     }
     if (hasRelic(state.relics, 'kunai')) {
       nextCombat.playerStatuses.dexterity += 1;
-      events.push({ id: `${Date.now()}_kuna`, targetUid: 'player', text: '苦无: 敏捷+1', tone: 'buff' });
+      events.push({ id: `${Date.now()}_kuna`, targetUid: 'player', msg: { key: 'kunai', n: 1 }, tone: 'buff' });
     }
   }
 
   // Trigger Corpse Explosion chain if any marked enemy died
   const ceRes = triggerCorpseExplosionIfNeeded(nextCombat.enemies, new Set(), events);
-  nextCombat.enemies = ceRes.enemies;
+  nextCombat.enemies = applyBossPhase2ToAll(ceRes.enemies, events, nextCombat.log);
 
   // Lifesteal heal
   if (totalLifesteal > 0) {
@@ -830,7 +855,7 @@ export function playCard(
     nextHp += healed;
     hpHealedThisAction += healed;
     if (healed > 0) {
-      events.push({ id: `${Date.now()}_ls`, targetUid: 'player', text: `+${healed} 生命`, tone: 'heal' });
+      events.push({ id: `${Date.now()}_ls`, targetUid: 'player', msg: { key: 'heal', n: healed }, tone: 'heal' });
     }
   }
 
@@ -838,6 +863,13 @@ export function playCard(
   const drawCount = card.upgraded && def.upgradedDraw !== undefined ? def.upgradedDraw : def.draw || 0;
   if (drawCount > 0) {
     nextCombat = drawCardsIntoHand(nextCombat, drawCount);
+  }
+  // Battle Trance: lock further draws only after its own draw has resolved.
+  if (def.noMoreDraw) {
+    nextCombat = {
+      ...nextCombat,
+      playerStatuses: { ...nextCombat.playerStatuses, noDrawThisTurn: true },
+    };
   }
 
   // Add Shivs
@@ -855,7 +887,7 @@ export function playCard(
     nextCombat.hand = nextCombat.hand.map((c) => ({ ...c, upgraded: true }));
     nextCombat.drawPile = nextCombat.drawPile.map((c) => ({ ...c, upgraded: true }));
     nextCombat.discardPile = nextCombat.discardPile.map((c) => ({ ...c, upgraded: true }));
-    events.push({ id: `${Date.now()}_apo`, targetUid: 'player', text: '全牌升华 (+)', tone: 'buff' });
+    events.push({ id: `${Date.now()}_apo`, targetUid: 'player', msg: { key: 'apotheosis' }, tone: 'buff' });
   }
 
   // Exhaust vs Discard vs Power
@@ -876,7 +908,7 @@ export function playCard(
     };
   }
 
-  nextCombat.log.push(`打出【${def.name}${card.upgraded ? '+' : ''}】`);
+  nextCombat.log.push({ key: 'logPlayCard', ref: def.id, upgraded: card.upgraded });
   nextCombat.combatDamageDealt = (nextCombat.combatDamageDealt || 0) + totalDealtThisCard + ceRes.explosionDamage;
   nextCombat.combatDamageBlocked = (nextCombat.combatDamageBlocked || 0) + blockedThisAction;
   nextCombat.combatDamageTaken = (nextCombat.combatDamageTaken || 0) + hpLostThisAction;
@@ -986,7 +1018,7 @@ export function usePotion(
   if (potion.id === 'heal_potion') {
     const healed = Math.min(15, state.maxHp - state.hp);
     nextPotions[slotIndex] = null;
-    events.push({ id: `${Date.now()}_hp_pot`, targetUid: 'player', text: `+${healed} 生命`, tone: 'heal' });
+    events.push({ id: `${Date.now()}_hp_pot`, targetUid: 'player', msg: { key: 'heal', n: healed }, tone: 'heal' });
     return {
       state: {
         ...state,
@@ -1018,7 +1050,7 @@ export function usePotion(
       const dmgRes = damageEnemy(target, 20, 0);
       potionDmg += dmgRes.hpDamage;
       nextCombat.enemies[idx] = dmgRes.enemy;
-      events.push({ id: `${Date.now()}_fp`, targetUid: target.uid, text: `-${dmgRes.hpDamage}`, tone: 'damage' });
+      events.push({ id: `${Date.now()}_fp`, targetUid: target.uid, msg: { key: 'damage', n: dmgRes.hpDamage }, tone: 'damage' });
       const ceRes = triggerCorpseExplosionIfNeeded(nextCombat.enemies, new Set(), events);
       nextCombat.enemies = ceRes.enemies;
       potionDmg += ceRes.explosionDamage;
@@ -1028,7 +1060,7 @@ export function usePotion(
       events.push({
         id: `${Date.now()}_pp`,
         targetUid: target.uid,
-        text: res.blockedByArtifact ? '被人工制品抵消' : '中毒 +6',
+        msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyPoison', n: 6 },
         tone: 'poison',
       });
     }
@@ -1036,22 +1068,23 @@ export function usePotion(
     if (potion.id === 'block_potion') {
       nextCombat.playerBlock += 12;
       potionBlock += 12;
-      events.push({ id: `${Date.now()}_bp`, targetUid: 'player', text: '+12 格挡', tone: 'block' });
+      events.push({ id: `${Date.now()}_bp`, targetUid: 'player', msg: { key: 'gainBlock', n: 12 }, tone: 'block' });
     } else if (potion.id === 'strength_potion') {
       nextCombat.playerStatuses.strength += 2;
-      events.push({ id: `${Date.now()}_sp`, targetUid: 'player', text: '力量 +2', tone: 'buff' });
+      events.push({ id: `${Date.now()}_sp`, targetUid: 'player', msg: { key: 'gainStrength', n: 2 }, tone: 'buff' });
     } else if (potion.id === 'energy_potion') {
       nextCombat.energy += 2;
-      events.push({ id: `${Date.now()}_ep`, targetUid: 'player', text: '+2 能量', tone: 'buff' });
+      events.push({ id: `${Date.now()}_ep`, targetUid: 'player', msg: { key: 'gainEnergy', n: 2 }, tone: 'buff' });
     } else if (potion.id === 'swift_potion') {
       nextCombat = drawCardsIntoHand(nextCombat, 3);
-      events.push({ id: `${Date.now()}_swp`, targetUid: 'player', text: '抽 3 张牌', tone: 'buff' });
+      events.push({ id: `${Date.now()}_swp`, targetUid: 'player', msg: { key: 'draw', n: 3 }, tone: 'buff' });
     }
   }
 
+  nextCombat.enemies = applyBossPhase2ToAll(nextCombat.enemies, events, nextCombat.log);
   nextPotions[slotIndex] = null;
   nextCombat.combatDamageDealt = (nextCombat.combatDamageDealt || 0) + potionDmg;
-  nextCombat.log.push(`使用了药水【${potion.name}】`);
+  nextCombat.log.push({ key: 'logUsePotion', ref: potion.id });
   const nextState: RunState = {
     ...state,
     potions: nextPotions,
@@ -1102,14 +1135,14 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       hpLostTurn += Math.min(nextHp, rem);
       nextHp = Math.max(0, nextHp - rem);
     }
-    events.push({ id: `${Date.now()}_burn`, targetUid: 'player', text: `-${burnDmg} 灼伤`, tone: 'damage' });
+    events.push({ id: `${Date.now()}_burn`, targetUid: 'player', msg: { key: 'burn', n: burnDmg }, tone: 'damage' });
   }
 
   // Orichalcum relic & Metallicize power
   if (hasRelic(state.relics, 'orichalcum') && nextCombat.playerBlock === 0) {
     nextCombat.playerBlock += 6;
     blockGainedTurn += 6;
-    events.push({ id: `${Date.now()}_ori`, targetUid: 'player', text: '+6 奥利哈刚', tone: 'block' });
+    events.push({ id: `${Date.now()}_ori`, targetUid: 'player', msg: { key: 'orichalcum', n: 6 }, tone: 'block' });
   }
   if (nextCombat.playerStatuses.metallicize > 0) {
     nextCombat.playerBlock += nextCombat.playerStatuses.metallicize;
@@ -1117,7 +1150,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     events.push({
       id: `${Date.now()}_met_end`,
       targetUid: 'player',
-      text: `+${nextCombat.playerStatuses.metallicize} 格挡`,
+      msg: { key: 'gainBlock', n: nextCombat.playerStatuses.metallicize },
       tone: 'block',
     });
   }
@@ -1152,6 +1185,16 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     };
   }
 
+  // Player debuffs that existed before the enemies act. Only these tick down at
+  // the start of the next player turn; stacks applied during this enemy turn
+  // are "just applied" and last a full round (otherwise 1-stack debuffs from
+  // enemies would expire before ever mattering).
+  const debuffsBeforeEnemyTurn = {
+    vulnerable: nextCombat.playerStatuses.vulnerable,
+    weak: nextCombat.playerStatuses.weak,
+    frail: nextCombat.playerStatuses.frail,
+  };
+
   // 2. Enemy Turn Execution
   let hitPlayer = false;
   const explodedSet = new Set<string>();
@@ -1166,7 +1209,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       poisonDmgTurn += pDmg;
       enemy.hp = Math.max(0, enemy.hp - pDmg);
       enemy.statuses.poison = Math.max(0, enemy.statuses.poison - 1);
-      events.push({ id: `${Date.now()}_pt_${i}`, targetUid: enemy.uid, text: `-${pDmg} 毒`, tone: 'poison' });
+      events.push({ id: `${Date.now()}_pt_${i}`, targetUid: enemy.uid, msg: { key: 'poisonTick', n: pDmg }, tone: 'poison' });
       if (enemy.hp <= 0) {
         nextCombat.enemies[i] = enemy;
         const ceRes = triggerCorpseExplosionIfNeeded(nextCombat.enemies, explodedSet, events);
@@ -1183,6 +1226,9 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     if (enemy.statuses.metallicize > 0) {
       enemy.block += enemy.statuses.metallicize;
     }
+    // A poison tick may have pushed the boss to half HP; check after the block
+    // reset so the phase-2 block survives into the player's next turn.
+    enemy = applyBossPhase2IfNeeded(enemy, events, nextCombat.log);
 
     const intent = enemy.intent;
 
@@ -1195,7 +1241,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
         if (nextCombat.playerBlock >= raw) {
           nextCombat.playerBlock -= raw;
           damageBlockedTurn += raw;
-          events.push({ id: `${Date.now()}_eb_${i}_${h}`, targetUid: 'player', text: '格挡', tone: 'block' });
+          events.push({ id: `${Date.now()}_eb_${i}_${h}`, targetUid: 'player', msg: { key: 'blocked' }, tone: 'block' });
         } else {
           damageBlockedTurn += nextCombat.playerBlock;
           const hpDmg = raw - nextCombat.playerBlock;
@@ -1203,7 +1249,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
           hpLostTurn += Math.min(nextHp, hpDmg);
           nextHp = Math.max(0, nextHp - hpDmg);
           hitPlayer = true;
-          events.push({ id: `${Date.now()}_eh_${i}_${h}`, targetUid: 'player', text: `-${hpDmg}`, tone: 'damage' });
+          events.push({ id: `${Date.now()}_eh_${i}_${h}`, targetUid: 'player', msg: { key: 'damage', n: hpDmg }, tone: 'damage' });
         }
       }
     }
@@ -1211,17 +1257,17 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     // Enemy Block
     if (intent.block) {
       enemy.block += intent.block;
-      events.push({ id: `${Date.now()}_eblk_${i}`, targetUid: enemy.uid, text: `+${intent.block} 格挡`, tone: 'block' });
+      events.push({ id: `${Date.now()}_eblk_${i}`, targetUid: enemy.uid, msg: { key: 'gainBlock', n: intent.block }, tone: 'block' });
     }
 
     // Enemy Buffs
     if (intent.gainStrength) {
       enemy.statuses.strength += intent.gainStrength;
-      events.push({ id: `${Date.now()}_estr_${i}`, targetUid: enemy.uid, text: `力量 +${intent.gainStrength}`, tone: 'buff' });
+      events.push({ id: `${Date.now()}_estr_${i}`, targetUid: enemy.uid, msg: { key: 'gainStrength', n: intent.gainStrength }, tone: 'buff' });
     }
     if (intent.gainRitual) {
       enemy.statuses.ritual += intent.gainRitual;
-      events.push({ id: `${Date.now()}_erit_${i}`, targetUid: enemy.uid, text: `仪式 +${intent.gainRitual}`, tone: 'buff' });
+      events.push({ id: `${Date.now()}_erit_${i}`, targetUid: enemy.uid, msg: { key: 'gainRitual', n: intent.gainRitual }, tone: 'buff' });
     }
     if (intent.gainMetallicize) {
       enemy.statuses.metallicize += intent.gainMetallicize;
@@ -1235,7 +1281,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       events.push({
         id: `${Date.now()}_pv_${i}`,
         targetUid: 'player',
-        text: res.blockedByArtifact ? '被人工制品抵消' : `易伤 +${intent.applyVulnerable}`,
+        msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyVulnerable', n: intent.applyVulnerable },
         tone: 'debuff',
       });
     }
@@ -1245,7 +1291,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       events.push({
         id: `${Date.now()}_pw_${i}`,
         targetUid: 'player',
-        text: res.blockedByArtifact ? '被人工制品抵消' : `虚弱 +${intent.applyWeak}`,
+        msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyWeak', n: intent.applyWeak },
         tone: 'debuff',
       });
     }
@@ -1255,7 +1301,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       events.push({
         id: `${Date.now()}_pf_${i}`,
         targetUid: 'player',
-        text: res.blockedByArtifact ? '被人工制品抵消' : `脆弱 +${intent.applyFrail}`,
+        msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyFrail', n: intent.applyFrail },
         tone: 'debuff',
       });
     }
@@ -1263,11 +1309,10 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       for (let k = 0; k < intent.addStatusCount; k++) {
         nextCombat.discardPile.push(createCardInstance(intent.addStatusCardId, false));
       }
-      const cardName = CARD_DEFS[intent.addStatusCardId]?.name || '状态牌';
       events.push({
         id: `${Date.now()}_sc_${i}`,
         targetUid: 'player',
-        text: `弃牌堆 +${intent.addStatusCount} ${cardName}`,
+        msg: { key: 'statusCards', n: intent.addStatusCount, ref: intent.addStatusCardId },
         tone: 'debuff',
       });
     }
@@ -1337,14 +1382,14 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
   if (nextCombat.turn === 2 && hasRelic(state.relics, 'horn_cleat')) {
     nextCombat.playerBlock += 14;
     turnStartBlock += 14;
-    events.push({ id: `${Date.now()}_hc`, targetUid: 'player', text: '+14 羊角格挡', tone: 'block' });
+    events.push({ id: `${Date.now()}_hc`, targetUid: 'player', msg: { key: 'hornCleat', n: 14 }, tone: 'block' });
   }
 
   // Phantasmal Killer double damage activation
   if (nextCombat.playerStatuses.doubleDamageNextTurn) {
     nextCombat.doubleDamageActive = true;
     nextCombat.playerStatuses.doubleDamageNextTurn = false;
-    events.push({ id: `${Date.now()}_pk`, targetUid: 'player', text: '幻影绝杀: 伤害翻倍!', tone: 'buff' });
+    events.push({ id: `${Date.now()}_pk`, targetUid: 'player', msg: { key: 'phantasmal' }, tone: 'buff' });
   } else {
     nextCombat.doubleDamageActive = false;
   }
@@ -1355,7 +1400,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     events.push({
       id: `${Date.now()}_df`,
       targetUid: 'player',
-      text: `恶魔化身: 力量+${nextCombat.playerStatuses.demonForm}`,
+      msg: { key: 'demonForm', n: nextCombat.playerStatuses.demonForm },
       tone: 'buff',
     });
   }
@@ -1367,7 +1412,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       events.push({
         id: `${Date.now()}_nf_${e.uid}`,
         targetUid: e.uid,
-        text: res.blockedByArtifact ? '人工制品抵消' : `中毒 +${nf}`,
+        msg: res.blockedByArtifact ? { key: 'artifactBlocked' } : { key: 'applyPoison', n: nf },
         tone: 'poison',
       });
       return { ...e, statuses: res.statuses };
@@ -1381,14 +1426,14 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       return { ...e, hp: Math.max(0, e.hp - 3) };
     });
     const ceRelic = triggerCorpseExplosionIfNeeded(nextCombat.enemies, explodedSet, events);
-    nextCombat.enemies = ceRelic.enemies;
+    nextCombat.enemies = applyBossPhase2ToAll(ceRelic.enemies, events, nextCombat.log);
     relicDmgTurn += ceRelic.explosionDamage;
   }
 
-  // Decrement player debuffs
-  if (nextCombat.playerStatuses.vulnerable > 0) nextCombat.playerStatuses.vulnerable -= 1;
-  if (nextCombat.playerStatuses.weak > 0) nextCombat.playerStatuses.weak -= 1;
-  if (nextCombat.playerStatuses.frail > 0) nextCombat.playerStatuses.frail -= 1;
+  // Decrement player debuffs that were already active before this enemy turn
+  if (debuffsBeforeEnemyTurn.vulnerable > 0) nextCombat.playerStatuses.vulnerable -= 1;
+  if (debuffsBeforeEnemyTurn.weak > 0) nextCombat.playerStatuses.weak -= 1;
+  if (debuffsBeforeEnemyTurn.frail > 0) nextCombat.playerStatuses.frail -= 1;
 
   // Draw 5 cards
   nextCombat = drawCardsIntoHand(nextCombat, 5);
