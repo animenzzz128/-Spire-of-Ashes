@@ -38,6 +38,7 @@ Ascend the 15-floor Obsidian Spire. Read enemy intents with clarity, allocate li
   - Every card, relic, potion, enemy, event, manual, and statistic adapts instantly between `简体中文` and `English`.
 - **Ascension 0–2 & Auto-Save Resume | 进阶挑战与自动断点续传**
   - Run state automatically saves to `localStorage` so you can continue anytime from the Main Menu.
+  - Saves are versioned and migrated (`src/game/save.ts`), validated on load, and keep the random sequence, so a resumed run plays out exactly as it would have. An unreadable save is backed up and reported instead of breaking the game.
 
 ---
 
@@ -49,6 +50,8 @@ Ascend the 15-floor Obsidian Spire. Read enemy intents with clarity, allocate li
 | Quick Play Card | Number keys `1` – `9` |
 | End Turn | Click **End Turn** or press `E` / `Space` |
 | Cancel Targeting | Click **Cancel** or press `Esc` |
+| Choose a Target with the Keyboard | After selecting a card or potion: arrow keys to move between enemies, `Enter` to confirm |
+| Close a Dialog | `Esc` (keys don't reach the combat behind an open dialog) |
 | Stoke (burn a card for Ember) | Click **Stoke** then a card, or hover a card and press `B` |
 | Class Ability (Temper / Ash Veil) | Click the ability button or press `Q` |
 | Inspect Piles / Deck | Click Draw Pile, Discard Pile, Exhaust Pile, or Deck HUD button |

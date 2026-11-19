@@ -5,12 +5,14 @@ import {
   effVal,
   getCardEffects,
   getPrimaryBlockEffect,
+  getCardCost,
   getPrimaryDamageEffect,
   getStarterDeck,
 } from '../src/game/cards';
 import {
   addPotionToSlot,
   calculateCardBlockPreview,
+  calculateCardTotalDamage,
   calculateCardDamagePreview,
   calculateEnemyAttackPreview,
   createNewRun,
@@ -28,6 +30,7 @@ import { BALANCE } from '../src/game/balance';
 import { computeEnemyNextIntent } from '../src/game/enemies';
 import { seedRng } from '../src/game/rng';
 import { claimGold, restHeal, returnToMap } from '../src/game/rooms';
+import { LoadResult, parseSave, resumeRun, serializeRun } from '../src/game/save';
 import {
   CARD_EN,
   ENEMY_EN,
@@ -654,6 +657,110 @@ function testDeterminismAndRooms() {
   console.log('✓ Seeded RNG, Rotburst single explosion & engine room actions passed');
 }
 
+// ---------------------------------------------------------------------------
+// P3.0: versioned saves, resume determinism, stuck enemy turn, damage badge
+// ---------------------------------------------------------------------------
+function firstCombat(hero: 'ironwarden' | 'shadowweaver', seed: number): RunState {
+  seedRng(seed);
+  const run = createNewRun(hero);
+  const node = run.map.find((n) => n.floor === 1)!;
+  return enterMapNode(run, node.id);
+}
+
+/** Play every affordable card left to right, then end the turn; repeat. */
+function autoplay(run: RunState, turns: number): RunState {
+  for (let t = 0; t < turns && run.phase === 'COMBAT'; t++) {
+    for (const card of [...run.combat!.hand]) {
+      if (run.phase !== 'COMBAT') break;
+      const target = run.combat!.enemies.find((e) => e.hp > 0)?.uid;
+      run = playCard(run, card.uid, target).state;
+      if (run.combat?.pendingDiscard) run = discardSelectedCard(run, run.combat.hand[0].uid);
+    }
+    if (run.phase === 'COMBAT') run = resolveEnemyTurn(run).state;
+  }
+  return run;
+}
+
+function testSaves() {
+  // Same seed -> identical run, ids included (uids no longer use the clock).
+  seedRng(42);
+  const a = createNewRun('ironwarden');
+  seedRng(42);
+  const b = createNewRun('ironwarden');
+  assert.equal(JSON.stringify(a), JSON.stringify(b), 'Same seed gives a byte-identical new run');
+
+  // Resuming a save continues the exact same random sequence and id counter.
+  const mid = autoplay(firstCombat('shadowweaver', 9), 1);
+  assert.equal(mid.phase, 'COMBAT');
+  const raw = serializeRun(mid);
+  const straight = autoplay(mid, 3);
+  const loaded = parseSave(raw);
+  assert.equal(loaded.status, 'ok');
+  const resumed = autoplay(resumeRun((loaded as Extract<LoadResult, { status: 'ok' }>).save), 3);
+  assert.equal(JSON.stringify(resumed), JSON.stringify(straight), 'A resumed run plays out exactly like the original');
+
+  // A save taken during the enemy-turn animation no longer locks the run.
+  const stuck = firstCombat('ironwarden', 3);
+  stuck.combat!.enemyTurnInProgress = true;
+  const stuckLoad = parseSave(serializeRun(stuck));
+  assert.equal(stuckLoad.status, 'ok');
+  const unstuck = resumeRun((stuckLoad as Extract<LoadResult, { status: 'ok' }>).save);
+  assert.equal(unstuck.combat!.enemyTurnInProgress, false, 'Resume finishes the interrupted enemy turn');
+  assert.equal(unstuck.combat!.turn, 2, 'The enemy turn was resolved');
+  const card = unstuck.combat!.hand.find((c) => getCardCost(c) >= 0 && getCardCost(c) <= unstuck.combat!.energy)!;
+  assert.notEqual(playCard(unstuck, card.uid, unstuck.combat!.enemies[0].uid).state, unstuck, 'Cards can be played again');
+
+  // Version-2 saves (a bare RunState from before P2) migrate.
+  const legacy = firstCombat('ironwarden', 5) as unknown as Record<string, unknown>;
+  const legacyCombat = legacy.combat as Record<string, unknown>;
+  for (const k of ['ember', 'emberCap', 'stokesThisTurn', 'abilityUsesThisTurn', 'temperPending', 'temperedThisTurn']) delete legacyCombat[k];
+  const migrated = parseSave(JSON.stringify(legacy));
+  assert.equal(migrated.status, 'ok', 'A v2 save loads');
+  const mRun = (migrated as Extract<LoadResult, { status: 'ok' }>).save.run;
+  assert.equal(mRun.combat!.ember, 0, 'Migration fills Ember fields');
+  assert.equal(mRun.combat!.emberCap, 10);
+
+  // Repairs: unknown cards are dropped, stale relic copies refreshed from current data.
+  const repair = firstCombat('ironwarden', 6);
+  repair.deck.push({ uid: 'ghost', defId: 'no_such_card', upgraded: false });
+  repair.combat!.hand.push({ uid: 'ghost2', defId: 'no_such_card', upgraded: false });
+  repair.relics = [{ ...repair.relics[0], description: 'stale text from an old version' }];
+  const repaired = parseSave(serializeRun(repair));
+  assert.equal(repaired.status, 'ok');
+  const rRes = repaired as Extract<LoadResult, { status: 'ok' }>;
+  assert.ok(!rRes.save.run.deck.some((c) => c.defId === 'no_such_card'), 'Unknown deck cards are removed');
+  assert.ok(!rRes.save.run.combat!.hand.some((c) => c.defId === 'no_such_card'), 'Unknown hand cards are removed');
+  assert.ok(rRes.repairs.length >= 2, 'Repairs are reported');
+  assert.equal(rRes.save.run.relics[0].description, RELIC_DEFS[repair.relics[0].id].description, 'Relics come from current data');
+
+  // Unusable saves are reported, never loaded.
+  assert.equal(parseSave('{not json').status, 'corrupt');
+  assert.equal(parseSave(JSON.stringify({ ...repair, heroId: 'no_such_hero' })).status, 'corrupt', 'Unknown hero is rejected');
+  assert.equal(parseSave(JSON.stringify({ ...repair, phase: 'COMBAT', combat: null })).status, 'corrupt');
+  assert.equal(parseSave(JSON.stringify({ version: 99, run: repair })).status, 'newer', 'Saves from newer versions are not touched');
+  assert.equal(parseSave(serializeRun({ ...repair, phase: 'DEFEAT', combat: null })).status, 'none', 'Finished runs are not resumable');
+  assert.equal(parseSave(null).status, 'none');
+  console.log('✓ Saves: versioning, migration, repair, resume determinism & stuck-turn recovery passed');
+}
+
+function testDamageBadge() {
+  let run = freshCombat('ironwarden');
+  const target = run.combat!.enemies[0];
+  const chop = createCardInstance('kindling_chop');
+  const after = createCardInstance('aftershock');
+  const edge = createCardInstance('molten_edge');
+  const guard = createCardInstance('anvil_guard');
+  run.combat!.hand = [chop, after, edge, guard];
+  assert.equal(calculateCardTotalDamage(chop, run, target), 7, 'Effect-list cards get a damage total');
+  assert.equal(calculateCardTotalDamage(guard, run, target), null, 'Non-damage cards get none');
+  run.combat!.ember = 4;
+  assert.equal(calculateCardTotalDamage(edge, run, target), 6 + 4 * 3, 'Ember scaling is included');
+  run = useClassAbility(run).state;
+  assert.equal(calculateCardTotalDamage(chop, run, target), 13, 'Temper is included');
+  assert.equal(calculateCardTotalDamage(after, run, target), 16, 'Tempered Aftershock counts both hits');
+  console.log('✓ Damage badge totals (effect cards, Ember, Temper, multi-effect) passed');
+}
+
 testMapInvariants();
 testCombatMechanicsAndStats();
 testBilingualCoverage();
@@ -661,4 +768,6 @@ testP0Regressions();
 testEmberMechanics();
 testBossCharge();
 testDeterminismAndRooms();
+testSaves();
+testDamageBadge();
 console.log('ALL VERIFICATION CHECKS PASSED');

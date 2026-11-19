@@ -17,6 +17,7 @@ import {
 import { CARD_DEFS, getCardCost } from '../game/cards';
 import {
   abilityCost,
+  calculateCardTotalDamage,
   calculateEnemyAttackPreview,
   canStoke,
   canUseAbility,
@@ -45,6 +46,7 @@ import {
 import { CardView } from './CardView';
 import { EnemyArtwork } from './EnemyArtwork';
 import { PileModal } from './PileModal';
+import { isDialogOpen } from './useDialog';
 import { assetUrl } from '../game/assets';
 
 interface CombatArenaViewProps {
@@ -413,6 +415,8 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
   const [pointerOffset, setPointerOffset] = useState({ x: 0, y: 0 });
   // Stoke mode: the next hand card clicked is burned for Ember instead of played.
   const [stokeMode, setStokeMode] = useState(false);
+  // Enemy elements, for keyboard targeting (arrow keys move between them).
+  const enemyRefs = useRef(new Map<string, HTMLDivElement>());
 
   // Hand row width, used to overlap cards so the whole hand fits on one row.
   // A callback ref attaches the observer whenever the row element mounts.
@@ -452,6 +456,17 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
     setStokeMode(false);
   }, [combat?.turn, combat?.hand.length]);
 
+  // Entering targeting mode (a targeted card or potion with 2+ living enemies)
+  // moves focus to the first enemy, so keyboard players can pick a target.
+  useEffect(() => {
+    if (!combat || (!selectedCardUid && pendingPotionSlot === null)) return;
+    const first = combat.enemies.find((en) => en.hp > 0);
+    if (first && combat.enemies.filter((en) => en.hp > 0).length > 1) {
+      enemyRefs.current.get(first.uid)?.focus({ preventScroll: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCardUid, pendingPotionSlot]);
+
   useEffect(() => {
     setBgFailed(false);
   }, [state.floor, combat?.isEliteFight, combat?.isBossFight]);
@@ -459,7 +474,8 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
   // Keyboard shortcuts: 1-9 select/play card, E/Space end turn, Escape cancel selection
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!combat || combat.enemyTurnInProgress || inspectPile) return;
+      // Keys belong to an open dialog (glossary, settings, piles...), not the combat behind it.
+      if (!combat || combat.enemyTurnInProgress || inspectPile || isDialogOpen()) return;
       if (e.key === 'Escape') {
         setSelectedCardUid(null);
         setStokeMode(false);
@@ -482,8 +498,19 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
         if (canUseAbility(state)) onUseAbility();
         return;
       }
+      if (e.key.startsWith('Arrow') && (selectedCardUid || pendingPotionSlot !== null)) {
+        const order = combat.enemies.filter((en) => en.hp > 0).map((en) => en.uid);
+        if (order.length === 0) return;
+        e.preventDefault();
+        const current = order.findIndex((uid) => enemyRefs.current.get(uid) === document.activeElement);
+        const step = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
+        const next = order[(current + step + order.length) % order.length];
+        enemyRefs.current.get(next)?.focus();
+        return;
+      }
       if ((e.key === 'e' || e.key === 'E' || e.key === ' ') && !combat.pendingDiscard) {
-        if (document.activeElement?.tagName !== 'BUTTON') {
+        const active = document.activeElement;
+        if (active?.tagName !== 'BUTTON' && active?.getAttribute('role') !== 'button') {
           e.preventDefault();
           onEndTurn();
         }
@@ -539,7 +566,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
   const handCount = combat.hand.length;
   const handStep =
     handCount > 1 && handWidth > 0
-      ? Math.min(handCardWidth + handGap, (handWidth - handCardWidth) / (handCount - 1))
+      ? Math.max(24, Math.min(handCardWidth + handGap, (handWidth - handCardWidth) / (handCount - 1)))
       : handCardWidth + handGap;
 
   const handleCardClick = (card: CardInstance) => {
@@ -572,6 +599,34 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
     } else {
       onPlayCard(card.uid);
       setSelectedCardUid(null);
+    }
+  };
+
+  // A dropped card follows the same rules as a click: Stoke mode burns it, a
+  // pending discard discards it, and a targeted card with no clear target is
+  // selected so the player can pick one (it used to do nothing silently).
+  const handleDropCard = (enemyUid?: string) => {
+    const uid = draggingCardUid;
+    setDraggingCardUid(null);
+    const card = uid ? combat.hand.find((c) => c.uid === uid) : undefined;
+    if (!card || combat.enemyTurnInProgress) return;
+    if (stokeMode || combat.pendingDiscard) {
+      handleCardClick(card);
+      return;
+    }
+    const def = CARD_DEFS[card.defId];
+    if (!def) return;
+    if (def.target !== 'enemy') {
+      onPlayCard(card.uid);
+      setSelectedCardUid(null);
+      return;
+    }
+    const target = livingEnemies.find((e) => e.uid === enemyUid) || (livingEnemies.length === 1 ? livingEnemies[0] : undefined);
+    if (target) {
+      onPlayCard(card.uid, target.uid);
+      setSelectedCardUid(null);
+    } else {
+      setSelectedCardUid(card.uid);
     }
   };
 
@@ -868,13 +923,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
         }}
         onDrop={(e) => {
           e.preventDefault();
-          if (!draggingCardUid) return;
-          const dragged = combat.hand.find((c) => c.uid === draggingCardUid);
-          const dDef = dragged ? CARD_DEFS[dragged.defId] : undefined;
-          if (dDef && (dDef.target !== 'enemy' || livingEnemies.length === 1)) {
-            onPlayCard(draggingCardUid, livingEnemies[0]?.uid);
-          }
-          setDraggingCardUid(null);
+          handleDropCard();
         }}
         className={`relative z-10 mx-auto flex w-full max-w-[1320px] flex-1 flex-col md:flex-row items-center md:items-end justify-between gap-10 px-6 pb-8 pt-6 ${
           arenaShake ? 'animate-arena-shake' : ''
@@ -1037,47 +1086,38 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                 : 'md:translate-y-0 z-20';
 
             let targetDamagePreview: { total: number; lethal: boolean } | null = null;
-            if (!dead && activePreviewCard) {
+            if (!dead && activePreviewCard && !stokeMode) {
               const selDef = CARD_DEFS[activePreviewCard.defId];
               const cost = getCardCost(activePreviewCard);
               const affordable = cost === -1 || (cost >= 0 && combat.energy >= cost);
-              if (
-                affordable &&
-                selDef &&
-                (selDef.damage !== undefined || selDef.blockAsDamage) &&
-                (selDef.target === 'enemy' || selDef.target === 'all_enemies')
-              ) {
-                const base =
-                  activePreviewCard.upgraded && selDef.upgradedDamage !== undefined
-                    ? selDef.upgradedDamage
-                    : selDef.damage || 0;
-                const rawBase = selDef.blockAsDamage ? combat.playerBlock : base;
-                const mult =
-                  activePreviewCard.upgraded && selDef.upgradedStrengthMult !== undefined
-                    ? selDef.upgradedStrengthMult
-                    : selDef.strengthMult || 1;
-                let perHit = rawBase + combat.playerStatuses.strength * mult;
-                if (combat.playerStatuses.weak > 0) perHit = Math.floor(perHit * 0.75);
-                if (combat.doubleDamageActive) perHit *= 2;
-                if (enemy.statuses.vulnerable > 0) perHit = Math.floor(perHit * 1.5);
-                perHit = Math.max(0, perHit);
-                const hits =
-                  selDef.cost === -1
-                    ? combat.energy
-                    : activePreviewCard.upgraded && selDef.upgradedHits !== undefined
-                    ? selDef.upgradedHits
-                    : selDef.hits || 1;
-                const total = perHit * hits;
-                targetDamagePreview = {
-                  total,
-                  lethal: total >= enemy.hp + enemy.block,
-                };
+              const total =
+                affordable && selDef && (selDef.target === 'enemy' || selDef.target === 'all_enemies')
+                  ? calculateCardTotalDamage(activePreviewCard, state, enemy)
+                  : null;
+              if (total !== null) {
+                targetDamagePreview = { total, lethal: total >= enemy.hp + enemy.block };
               }
             }
 
             return (
               <div
                 key={enemy.uid}
+                ref={(el) => {
+                  if (el) enemyRefs.current.set(enemy.uid, el);
+                  else enemyRefs.current.delete(enemy.uid);
+                }}
+                role="button"
+                tabIndex={dead ? -1 : 0}
+                aria-disabled={dead || undefined}
+                aria-label={`${enemyDisplayName} ${enemy.hp}/${enemy.maxHp} · ${intentSubtitle}`}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleEnemyClick(enemy);
+                  }
+                }}
+                onFocus={() => !dead && setHoveredEnemyUid(enemy.uid)}
+                onBlur={() => setHoveredEnemyUid(null)}
                 onMouseEnter={() => !dead && setHoveredEnemyUid(enemy.uid)}
                 onMouseLeave={() => setHoveredEnemyUid(null)}
                 onDragOver={(e) => {
@@ -1085,14 +1125,11 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                 }}
                 onDrop={(e) => {
                   e.preventDefault();
-                  if (!dead && draggingCardUid) {
-                    onPlayCard(draggingCardUid, enemy.uid);
-                    setDraggingCardUid(null);
-                    setSelectedCardUid(null);
-                  }
+                  e.stopPropagation();
+                  if (!dead) handleDropCard(enemy.uid);
                 }}
                 onClick={() => handleEnemyClick(enemy)}
-                className={`relative flex flex-col items-center transition-all duration-150 ${staggerCls} ${
+                className={`relative flex flex-col items-center rounded-2xl outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-4 focus-visible:ring-offset-transparent ${staggerCls} ${
                   dead
                     ? 'opacity-15 grayscale pointer-events-none scale-90'
                     : isTargetingEnemy
@@ -1220,11 +1257,14 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
         </div>
       </div>
 
-      {/* Bottom Hand & Controls Bar */}
+      {/* Bottom Hand & Controls Bar. From 1024px: one row [energy+Ember | hand |
+          piles+End Turn], with both side groups stacked vertically so the hand
+          keeps most of the width. Below 1024px the controls share the first row
+          and the hand takes the full second row. */}
       <div className="relative z-20 border-t border-white/10 bg-[#0d1118]/92 px-4 py-4 backdrop-blur-md sm:px-6">
-        <div className="mx-auto flex max-w-[1440px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mx-auto grid max-w-[1440px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
           {/* Left: Energy & Ember */}
-          <div className="flex items-center justify-between gap-4 lg:justify-start">
+          <div className="col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 lg:flex-col lg:flex-nowrap lg:items-start">
             <div className="flex items-center gap-3">
               <div className="flex h-14 w-14 flex-col items-center justify-center rounded-xl border border-amber-400/60 bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.3)]">
                 <Zap className="h-4 w-4" />
@@ -1255,16 +1295,12 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
               if (draggingCardUid) e.preventDefault();
             }}
             onDrop={(e) => {
+              // Dropping a card back on the hand cancels the drag.
               e.preventDefault();
-              if (!draggingCardUid) return;
-              const dragged = combat.hand.find((c) => c.uid === draggingCardUid);
-              const dDef = dragged ? CARD_DEFS[dragged.defId] : undefined;
-              if (dDef && (dDef.target !== 'enemy' || livingEnemies.length === 1)) {
-                onPlayCard(draggingCardUid, livingEnemies[0]?.uid);
-              }
+              e.stopPropagation();
               setDraggingCardUid(null);
             }}
-            className="flex min-w-0 flex-1 flex-nowrap items-center justify-center py-1"
+            className="col-span-2 row-start-2 flex min-w-0 flex-nowrap items-center justify-center py-1 lg:col-span-1 lg:col-start-2 lg:row-start-1"
           >
             {combat.hand.map((card, idx) => (
               <div
@@ -1303,7 +1339,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
           </div>
 
           {/* Right: Discard/Exhaust, Threat Warning & End Turn CTA */}
-          <div className="flex flex-col items-end gap-2">
+          <div className="col-start-2 row-start-1 flex flex-col items-end gap-2 lg:col-start-3">
             {totalIncomingDamage > 0 && (
               <div
                 className={`text-[11px] font-mono-num ${
@@ -1315,8 +1351,8 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                   : `${copy.incomingTotal} ${totalIncomingDamage} · ${copy.fullyBlocked}`}
               </div>
             )}
-            <div className="flex items-center justify-between gap-3 lg:justify-end">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-end gap-3 lg:flex-col lg:items-end">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setInspectPile('draw')}

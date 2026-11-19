@@ -954,10 +954,21 @@ export const CARD_DEFS: Record<string, CardDef> = {
   },
 };
 
-let uidCounter = 1;
+// Card and enemy instance ids come from a counter instead of the clock, so the
+// same seed and inputs always produce the same state. createNewRun resets it and
+// save.ts stores it with the run, so ids never collide after a resume.
+let uidCounter = 0;
 export function nextUid(prefix = 'c'): string {
   uidCounter += 1;
-  return `${prefix}_${Date.now().toString(36)}_${uidCounter}`;
+  return `${prefix}_${uidCounter}`;
+}
+
+export function getUidCounter(): number {
+  return uidCounter;
+}
+
+export function setUidCounter(n: number): void {
+  uidCounter = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
 }
 
 export function createCardInstance(defId: string, upgraded = false): CardInstance {

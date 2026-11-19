@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CombatArenaView } from './components/CombatArenaView';
 import { DamageStatsModal } from './components/DamageStatsModal';
 import { GlossaryModal } from './components/GlossaryModal';
@@ -16,6 +16,7 @@ import { SpireMapView } from './components/SpireMapView';
 import { TitleScreenView } from './components/TitleScreenView';
 import { TopHudBar } from './components/TopHudBar';
 import { TutorialGuideModal } from './components/TutorialGuideModal';
+import { DialogFrame } from './components/useDialog';
 import { CARD_DEFS } from './game/cards';
 import {
   createNewRun,
@@ -29,6 +30,17 @@ import {
   usePotion,
 } from './game/engine';
 import { Locale, UI_COPY } from './game/i18n';
+import { getUidCounter } from './game/cards';
+import { getRngState } from './game/rng';
+import {
+  clearSave,
+  quarantineSave,
+  readSave,
+  resumeRun,
+  SAVE_VERSION,
+  SaveEnvelope,
+  writeSave,
+} from './game/save';
 import {
   buyShopCard,
   buyShopPotion,
@@ -55,10 +67,18 @@ import {
   RunState,
 } from './game/types';
 
-// v2: card, relic, potion and enemy ids were renamed, so a v1 save cannot be
-// resumed safely. It is simply ignored (the run starts fresh).
-const ACTIVE_RUN_STORAGE_KEY = 'spire_ashes_active_run_v2';
 const LOCALE_STORAGE_KEY = 'spire_ashes_locale_v1';
+
+/** localStorage, or null where the browser blocks it (some private modes). */
+function getStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+type SaveNotice = 'corrupt' | 'newer' | 'writeFailed';
 
 export default function App() {
   const [runState, setRunState] = useState<RunState | null>(null);
@@ -70,19 +90,31 @@ export default function App() {
       return 'zh';
     }
   });
-  const [savedRun, setSavedRun] = useState<RunState | null>(() => {
-    try {
-      const raw = localStorage.getItem(ACTIVE_RUN_STORAGE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as RunState;
-      if (parsed && parsed.phase !== 'VICTORY' && parsed.phase !== 'DEFEAT' && parsed.hp > 0) {
-        return parsed;
-      }
-      return null;
-    } catch {
-      return null;
-    }
+  // The resumable run (see game/save.ts for the format, migrations and checks).
+  const [savedGame, setSavedGame] = useState<SaveEnvelope | null>(() => {
+    const storage = getStorage();
+    if (!storage) return null;
+    const res = readSave(storage);
+    return res.status === 'ok' ? res.save : null;
   });
+  const [saveNotice, setSaveNotice] = useState<SaveNotice | null>(null);
+  const savedRun = savedGame?.run ?? null;
+
+  // Report saves that could not be loaded; keep a backup copy of unreadable ones.
+  useEffect(() => {
+    const storage = getStorage();
+    if (!storage) return;
+    const res = readSave(storage);
+    if (res.status === 'corrupt') {
+      console.warn(`Saved run could not be loaded (${res.reason}); a copy was kept under spire_ashes_run_corrupt.`);
+      quarantineSave(storage);
+      setSaveNotice('corrupt');
+    } else if (res.status === 'newer') {
+      setSaveNotice('newer');
+    } else if (res.status === 'ok' && res.repairs.length > 0) {
+      console.info('Saved run repaired on load:', res.repairs);
+    }
+  }, []);
   const [bestVictories, setBestVictories] = useState<number>(() => {
     try {
       return parseInt(localStorage.getItem('spire_ashes_wins') || '0', 10) || 0;
@@ -174,19 +206,34 @@ export default function App() {
     }
   };
 
-  // Auto-save active run to localStorage
+  // Latest state for timers (the enemy turn resolves 420 ms after End Turn).
+  const runStateRef = useRef<RunState | null>(runState);
   useEffect(() => {
-    try {
-      if (runState && runState.phase !== 'VICTORY' && runState.phase !== 'DEFEAT' && runState.hp > 0) {
-        localStorage.setItem(ACTIVE_RUN_STORAGE_KEY, JSON.stringify(runState));
-        setSavedRun(runState);
-      } else if (runState && (runState.phase === 'VICTORY' || runState.phase === 'DEFEAT')) {
-        localStorage.removeItem(ACTIVE_RUN_STORAGE_KEY);
-        setSavedRun(null);
-      }
-    } catch {
-      // ignore storage errors
+    runStateRef.current = runState;
+  }, [runState]);
+
+  // Auto-save after every change. Finished runs are deleted (permadeath).
+  const warnedWriteFail = useRef(false);
+  useEffect(() => {
+    if (!runState) return;
+    const storage = getStorage();
+    if (runState.phase === 'VICTORY' || runState.phase === 'DEFEAT' || runState.hp <= 0) {
+      if (storage) clearSave(storage);
+      setSavedGame(null);
+      return;
     }
+    const ok = storage ? writeSave(storage, runState) : false;
+    if (!ok && !warnedWriteFail.current) {
+      warnedWriteFail.current = true;
+      setSaveNotice('writeFailed');
+    }
+    setSavedGame({
+      version: SAVE_VERSION,
+      savedAt: new Date().toISOString(),
+      rngState: getRngState(),
+      uidCounter: getUidCounter(),
+      run: runState,
+    });
   }, [runState]);
 
   useEffect(() => {
@@ -224,9 +271,9 @@ export default function App() {
   };
 
   const handleResumeRun = () => {
-    if (!savedRun) return;
+    if (!savedGame) return;
     sound.cardDraw();
-    setRunState(savedRun);
+    setRunState(resumeRun(savedGame));
     setShowDeckModal(false);
     setShowStatsModal(false);
     setShowMapOverlay(false);
@@ -234,12 +281,9 @@ export default function App() {
   };
 
   const handleClearSavedRun = () => {
-    try {
-      localStorage.removeItem(ACTIVE_RUN_STORAGE_KEY);
-    } catch {
-      // ignore storage errors
-    }
-    setSavedRun(null);
+    const storage = getStorage();
+    if (storage) clearSave(storage);
+    setSavedGame(null);
   };
 
   const handleSelectNode = (nodeId: string) => {
@@ -254,6 +298,8 @@ export default function App() {
     const card = runState.combat?.hand.find((c) => c.uid === cardUid);
     const def = card ? CARD_DEFS[card.defId] : undefined;
     const res = playCard(runState, cardUid, targetEnemyUid);
+    // The engine rejected the play (unplayable, too expensive, no target): no feedback.
+    if (res.state === runState) return;
 
     const vfxList: { targetUid: string; type: CombatVfxType }[] = [];
     let isHeavyHit = false;
@@ -398,30 +444,27 @@ export default function App() {
     );
 
     setTimeout(() => {
-      setRunState((current) => {
-        if (!current || !current.combat) return current;
-        const hadIncomingAttack = current.combat.enemies.some(
-          (e) => e.hp > 0 && (e.intent.damage || 0) > 0
-        );
-        const res = resolveEnemyTurn(current);
-        if (res.hitPlayer) {
-          sound.attack();
-          spawnVfx([{ targetUid: 'player', type: 'enemy_slash' }], true);
-        } else if (hadIncomingAttack) {
-          sound.block();
-          spawnVfx([{ targetUid: 'player', type: 'shield' }]);
-        } else {
-          sound.cardDraw();
-        }
-        pushCombatFeedback(res.events, res.hitPlayer);
-        if (res.state.combat) {
-          return {
-            ...res.state,
-            combat: { ...res.state.combat, enemyTurnInProgress: false },
-          };
-        }
-        return res.state;
-      });
+      const current = runStateRef.current;
+      if (!current || !current.combat || !current.combat.enemyTurnInProgress) return;
+      const hadIncomingAttack = current.combat.enemies.some(
+        (e) => e.hp > 0 && (e.intent.damage || 0) > 0
+      );
+      const res = resolveEnemyTurn(current);
+      if (res.hitPlayer) {
+        sound.attack();
+        spawnVfx([{ targetUid: 'player', type: 'enemy_slash' }], true);
+      } else if (hadIncomingAttack) {
+        sound.block();
+        spawnVfx([{ targetUid: 'player', type: 'shield' }]);
+      } else {
+        sound.cardDraw();
+      }
+      pushCombatFeedback(res.events, res.hitPlayer);
+      setRunState(
+        res.state.combat
+          ? { ...res.state, combat: { ...res.state.combat, enemyTurnInProgress: false } }
+          : res.state
+      );
     }, 420);
   };
 
@@ -457,8 +500,32 @@ export default function App() {
 
   const copy = UI_COPY[locale];
 
+  const noticeText =
+    saveNotice === 'corrupt'
+      ? copy.saveCorrupt
+      : saveNotice === 'newer'
+      ? copy.saveNewer
+      : saveNotice === 'writeFailed'
+      ? copy.saveWriteFailed
+      : null;
+
   return (
     <div className="min-h-screen bg-[#0b0e14] text-slate-100 flex flex-col">
+      {noticeText && (
+        <div
+          role="status"
+          className="fixed left-1/2 top-3 z-[100] flex w-[min(92vw,560px)] -translate-x-1/2 items-start gap-3 rounded-xl border border-amber-400/50 bg-[#1a1510]/95 px-4 py-3 text-sm text-amber-100 shadow-2xl"
+        >
+          <span className="flex-1 leading-relaxed">{noticeText}</span>
+          <button
+            type="button"
+            onClick={() => setSaveNotice(null)}
+            className="shrink-0 rounded-lg border border-amber-300/50 px-3 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-400/10 cursor-pointer"
+          >
+            {copy.dismiss}
+          </button>
+        </div>
+      )}
       {!runState ? (
         <TitleScreenView
           locale={locale}
@@ -599,14 +666,18 @@ export default function App() {
 
           {/* Read-Only Map Overlay while inside a room */}
           {showMapOverlay && runState.phase !== 'MAP' && (
-            <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-sm">
+            <DialogFrame
+              label={copy.mapTitle}
+              onClose={() => setShowMapOverlay(false)}
+              className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-sm outline-none"
+            >
               <SpireMapView
                 state={runState}
                 locale={locale}
                 readOnly
                 onCloseOverlay={() => setShowMapOverlay(false)}
               />
-            </div>
+            </DialogFrame>
           )}
         </>
       )}
