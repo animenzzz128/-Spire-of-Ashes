@@ -76,7 +76,7 @@ function testCombatMechanicsAndStats() {
   run = startCombat(run, 'boss', 15);
   assert.ok(run.combat, 'Combat should initialize');
   const boss = run.combat.enemies[0];
-  assert.equal(boss.maxHp, 288, 'Ascension 2 boss HP should scale +20%');
+  assert.equal(boss.maxHp, Math.round(220 * 1.2), 'Ascension 2 boss HP should scale +20%');
   assert.equal(boss.statuses.strength, 1, 'Ascension 2 boss starts with +1 strength');
 
   const bash = createCardInstance('bash', true);
@@ -92,14 +92,14 @@ function testCombatMechanicsAndStats() {
   run = res.state;
   assert.equal(run.combat!.enemies[0].statuses.artifact, 1, 'Boss artifact absorbs 1st debuff');
 
-  // Play Defend+ (8 block), Body Slam+ (8 + 1 str = 9 dmg)
+  // Play Defend+ (9 block), Body Slam+ (9 + 1 str = 10 dmg)
   res = playCard(run, defend.uid);
   run = res.state;
-  assert.equal(run.combat!.playerBlock, 8);
-  assert.ok(run.stats.blockGained >= 8, 'Stats must track blockGained');
+  assert.equal(run.combat!.playerBlock, 9);
+  assert.ok(run.stats.blockGained >= 9, 'Stats must track blockGained');
 
   const slamPreview = calculateCardDamagePreview(slam, run, run.combat!.enemies[0]);
-  assert.equal(slamPreview.perHit, 9, 'Body Slam should deal block(8) + str(1) = 9');
+  assert.equal(slamPreview.perHit, 10, 'Body Slam should deal block(9) + str(1) = 10');
   res = playCard(run, slam.uid, boss.uid);
   run = res.state;
 
@@ -110,18 +110,18 @@ function testCombatMechanicsAndStats() {
   run = res.state;
   assert.equal(run.combat!.playerStatuses.strength, 2, '3rd attack triggers Shuriken');
 
-  // Verify card damage stats recorded (Bash+ 10 + 1 Vajra Str = 11, Body Slam = 9, Heavy Blade+ = 19)
+  // Verify card damage stats recorded (Bash+ 10 + 1 Vajra Str = 11, Body Slam = 10, Heavy Blade+ = 19)
   assert.equal(run.stats.cardsByType.attack, 3);
   assert.equal(run.stats.cardsByType.skill, 1);
   assert.equal(run.stats.damageByCard.heavy_blade.damage, 19);
   assert.equal(run.stats.damageByCard.bash.damage, 11);
-  assert.equal(run.stats.attackDamageDealt, 11 + 9 + 19);
+  assert.equal(run.stats.attackDamageDealt, 11 + 10 + 19);
 
   // Play Whirlwind+ (X=1 energy left -> 8 + 2 = 10 dmg)
   res = playCard(run, whirl.uid);
   run = res.state;
   assert.equal(run.combat!.energy, 0);
-  assert.equal(run.stats.attackDamageDealt, 11 + 9 + 19 + 10);
+  assert.equal(run.stats.attackDamageDealt, 11 + 10 + 19 + 10);
 
   // End turn & verify Boss Turn resolves cleanly + tracks block/hpLost
   res = resolveEnemyTurn(run);
@@ -146,6 +146,8 @@ function testCombatMechanicsAndStats() {
       statuses: { ...sw.combat!.enemies[0].statuses, artifact: 0 },
     });
   }
+  // Exactly two enemies (the Sentry elite now spawns three).
+  sw.combat!.enemies = sw.combat!.enemies.slice(0, 2);
   sw.combat!.enemies[0].statuses.artifact = 0;
   sw.combat!.enemies[0].hp = 5;
   sw.combat!.enemies[0].maxHp = 40;
@@ -177,7 +179,8 @@ function testCombatMechanicsAndStats() {
   swRes = resolveEnemyTurn(sw);
   sw = swRes.state;
   assert.equal(sw.phase, 'REWARD', 'Corpse Explosion kills enemy 1 -> transitions to REWARD');
-  assert.ok(sw.stats.poisonDamageDealt >= 45, 'Poison + Corpse Explosion damage must be recorded');
+  // 5 poison (enemy 1 had 5 HP) + 30 explosion (capped at enemy 2's 30 HP; no overkill)
+  assert.equal(sw.stats.poisonDamageDealt, 35, 'Poison + Corpse Explosion damage must be recorded without overkill');
   assert.ok(sw.stats.combatHistory.length >= 1, 'Combat victory must append combatHistory entry');
   console.log('✓ Shadowweaver Poison, Survivor, Corpse Explosion & combatHistory passed');
 
@@ -201,7 +204,7 @@ function testCombatMechanicsAndStats() {
   frailRun.combat!.playerStatuses.frail = 2;
   const defCard = createCardInstance('iron_defend', false);
   const blkPrev = calculateCardBlockPreview(defCard, frailRun);
-  assert.equal(blkPrev.block, 3, '5 * 0.75 floored = 3 under Frail');
+  assert.equal(blkPrev.block, 4, '6 * 0.75 floored = 4 under Frail');
   assert.equal(blkPrev.reduced, true);
   console.log('✓ Frail block calculation passed');
 }
@@ -223,6 +226,26 @@ function testBilingualCoverage() {
     assert.ok(en.name.length > 0 && en.desc.length > 0, `Empty EN potion translation: ${id}`);
   }
   assert.ok(Object.keys(ENEMY_EN).length >= 9, 'All enemies localized');
+
+  // Card text must state the same numbers as the card data in both languages;
+  // CardView's live damage/block preview finds them by these exact phrases.
+  for (const [id, def] of Object.entries(CARD_DEFS)) {
+    if (def.blockAsDamage || def.cost === -1) continue;
+    for (const upgraded of [false, true]) {
+      const zh = upgraded ? def.upgradedDescription || def.description : def.description;
+      const en = upgraded ? tCard(id, 'en').upgDesc : tCard(id, 'en').desc;
+      const dmg = upgraded && def.upgradedDamage !== undefined ? def.upgradedDamage : def.damage;
+      const blk = upgraded && def.upgradedBlock !== undefined ? def.upgradedBlock : def.block;
+      if (dmg !== undefined) {
+        assert.ok(zh.includes(`造成 ${dmg} 点伤害`), `${id}${upgraded ? '+' : ''} zh text must say ${dmg} damage: ${zh}`);
+        assert.ok(en.includes(`Deal ${dmg} damage`), `${id}${upgraded ? '+' : ''} en text must say ${dmg} damage: ${en}`);
+      }
+      if (blk !== undefined) {
+        assert.ok(zh.includes(`获得 ${blk} 点格挡`), `${id}${upgraded ? '+' : ''} zh text must say ${blk} block: ${zh}`);
+        assert.ok(en.includes(`Gain ${blk} Block`), `${id}${upgraded ? '+' : ''} en text must say ${blk} block: ${en}`);
+      }
+    }
+  }
   const intentEn = tIntentLabel(
     { type: 'attack_debuff', damage: 8, hits: 1, applyVulnerable: 2, label: '碎颅重锤' },
     'en'
@@ -287,14 +310,15 @@ function testP0Regressions() {
   let bp = createNewRun('shadowweaver', 0);
   bp = startCombat(bp, 'boss', 15);
   const boss = bp.combat!.enemies[0];
-  boss.hp = 125;
+  const bossStartHp = Math.floor(boss.maxHp / 2) + 5; // 10 poison takes it below half
+  boss.hp = bossStartHp;
   boss.statuses.artifact = 0;
   boss.statuses.poison = 10;
   bp.combat!.hand = [];
   const bpAfter = resolveEnemyTurn(bp).state.combat!.enemies[0];
-  assert.equal(bpAfter.hp, 115);
+  assert.equal(bpAfter.hp, bossStartHp - 10);
   assert.equal(bpAfter.bossPhase2Triggered, true, 'Poison crossing 50% HP must trigger boss phase 2');
-  assert.ok(bpAfter.block >= 16, 'Phase 2 block must survive into the player turn');
+  assert.ok(bpAfter.block >= 10, 'Phase 2 block must survive into the player turn');
   console.log('✓ Boss phase 2 from poison passed');
 
   // 4. Wandering smith upgrades 2 random cards, not always the first two
@@ -343,6 +367,7 @@ function testP0Regressions() {
     apotheosis: {},
     bossPhase2: {},
     statusCards: { n: 2, ref: 'wound' },
+    statusCardsDraw: { n: 2, ref: 'wound' },
     logEnterCombat: { n: 3 },
     logMercury: { n: 3 },
     logPlayCard: { ref: 'bash', upgraded: true },

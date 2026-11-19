@@ -63,7 +63,7 @@ export function generateSpireEvent(state: RunState): EventState {
         {
           id: 'drink_deep',
           label: '痛饮泉水',
-          hint: '回复 22 点生命，并将 1 张随机稀有卡牌加入牌组。',
+          hint: '回复 22 点生命，将 1 张随机稀有卡牌加入牌组，但同时获得诅咒【蚀骨痛楚】。',
         },
         {
           id: 'wash_blades',
@@ -72,9 +72,9 @@ export function generateSpireEvent(state: RunState): EventState {
         },
         {
           id: 'toss_coin',
-          label: '投入 25 金币许愿',
-          hint: '获得一件遗物，或 50% 概率失去 6 点生命并获得 85 金币。',
-          disabled: state.gold < 25,
+          label: '投入 60 金币许愿',
+          hint: '50% 获得一件遗物；否则失去 6 点生命并获得 85 金币。',
+          disabled: state.gold < 60,
         },
       ],
     }),
@@ -211,14 +211,16 @@ export function resolveEventOption(state: RunState, optionId: string): RunState 
       next.stats.hpHealed += healed;
       const rares = getRewardPool(next.heroId).filter((c) => c.rarity === 'rare');
       const picked = rares[Math.floor(Math.random() * rares.length)];
+      // The fountain's price: a permanent Pain curse (previously this option had no downside).
+      next.deck.push(createCardInstance('pain', false));
       if (picked) {
         next.deck.push(createCardInstance(picked.id, false));
         const pickedEn = CARD_EN[picked.id]?.name || picked.name;
-        outcome = `清冽泉水回复了 ${healed} 点生命，你在泉底发现并习得了稀有卡牌【${picked.name}】！`;
-        outcomeEn = `The spring restores ${healed} HP and reveals a Rare card: [${pickedEn}]!`;
+        outcome = `清冽泉水回复了 ${healed} 点生命，你在泉底习得了稀有卡牌【${picked.name}】，但幻影的低语化作诅咒【蚀骨痛楚】缠上了你。`;
+        outcomeEn = `The spring restores ${healed} HP and reveals a Rare card: [${pickedEn}], but its whispers bind you with the curse [Pain].`;
       } else {
-        outcome = `清冽泉水回复了 ${healed} 点生命。`;
-        outcomeEn = `The cool spring restores ${healed} HP.`;
+        outcome = `清冽泉水回复了 ${healed} 点生命，但幻影的低语化作诅咒【蚀骨痛楚】缠上了你。`;
+        outcomeEn = `The spring restores ${healed} HP, but its whispers bind you with the curse [Pain].`;
       }
       break;
     }
@@ -231,7 +233,7 @@ export function resolveEventOption(state: RunState, optionId: string): RunState 
       break;
     }
     case 'toss_coin': {
-      next.gold -= 25;
+      next.gold -= 60;
       if (Math.random() < 0.5) {
         const relic = rollRelic(next.relics.map((r) => r.id));
         next.relics.push(relic);

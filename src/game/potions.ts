@@ -59,7 +59,17 @@ export const POTION_DEFS: Record<string, PotionDef> = {
   },
 };
 
+// Weighted by rarity (it used to be uniform, so the "rare" heal potion was as
+// common as any other).
+const POTION_WEIGHT: Record<PotionDef['rarity'], number> = { common: 1, uncommon: 0.6, rare: 0.4 };
+
 export function rollPotion(): PotionDef {
   const all = Object.values(POTION_DEFS);
-  return all[Math.floor(Math.random() * all.length)];
+  const total = all.reduce((sum, p) => sum + POTION_WEIGHT[p.rarity], 0);
+  let r = Math.random() * total;
+  for (const p of all) {
+    r -= POTION_WEIGHT[p.rarity];
+    if (r < 0) return p;
+  }
+  return all[all.length - 1];
 }

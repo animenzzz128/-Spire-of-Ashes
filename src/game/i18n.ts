@@ -312,16 +312,16 @@ export const HERO_EN: Record<
 
 export const CARD_EN: Record<string, { name: string; desc: string; upgDesc?: string }> = {
   iron_strike: { name: 'Iron Strike', desc: 'Deal 6 damage.', upgDesc: 'Deal 9 damage.' },
-  iron_defend: { name: 'Iron Defend', desc: 'Gain 5 Block.', upgDesc: 'Gain 8 Block.' },
+  iron_defend: { name: 'Iron Defend', desc: 'Gain 6 Block.', upgDesc: 'Gain 9 Block.' },
   bash: { name: 'Bash', desc: 'Deal 8 damage. Apply 2 Vulnerable.', upgDesc: 'Deal 10 damage. Apply 3 Vulnerable.' },
-  cleave: { name: 'Cleave', desc: 'Deal 8 damage to ALL enemies.', upgDesc: 'Deal 11 damage to ALL enemies.' },
+  cleave: { name: 'Cleave', desc: 'Deal 9 damage to ALL enemies.', upgDesc: 'Deal 12 damage to ALL enemies.' },
   pommel_strike: { name: 'Pommel Strike', desc: 'Deal 9 damage. Draw 1 card.', upgDesc: 'Deal 10 damage. Draw 2 cards.' },
-  twin_strike: { name: 'Twin Strike', desc: 'Deal 5 damage twice.', upgDesc: 'Deal 7 damage twice.' },
+  twin_strike: { name: 'Twin Strike', desc: 'Deal 6 damage twice.', upgDesc: 'Deal 8 damage twice.' },
   shrug_it_off: { name: 'Shrug It Off', desc: 'Gain 8 Block. Draw 1 card.', upgDesc: 'Gain 11 Block. Draw 1 card.' },
-  iron_wave: { name: 'Iron Wave', desc: 'Gain 5 Block. Deal 5 damage.', upgDesc: 'Gain 7 Block. Deal 7 damage.' },
+  iron_wave: { name: 'Iron Wave', desc: 'Gain 6 Block. Deal 6 damage.', upgDesc: 'Gain 8 Block. Deal 8 damage.' },
   body_slam: { name: 'Body Slam', desc: 'Deal damage equal to your Block.', upgDesc: 'Deal damage equal to your Block.' },
   heavy_blade: { name: 'Heavy Blade', desc: 'Deal 14 damage. Strength affects this 3x.', upgDesc: 'Deal 14 damage. Strength affects this 5x.' },
-  inflame: { name: 'Inflame', desc: 'Gain 2 Strength.', upgDesc: 'Gain 3 Strength.' },
+  inflame: { name: 'Inflame', desc: 'Gain 3 Strength.', upgDesc: 'Gain 4 Strength.' },
   metallicize: { name: 'Metallicize', desc: 'Gain 3 Block at the end of each turn.', upgDesc: 'Gain 4 Block at the end of each turn.' },
   bloodletting: { name: 'Bloodletting', desc: 'Lose 3 HP. Gain 2 Energy.', upgDesc: 'Lose 3 HP. Gain 3 Energy.' },
   battle_trance: { name: 'Battle Trance', desc: 'Draw 3 cards. No more draw this turn.', upgDesc: 'Draw 4 cards. No more draw this turn.' },
@@ -332,7 +332,7 @@ export const CARD_EN: Record<string, { name: string; desc: string; upgDesc?: str
   barricade: { name: 'Barricade', desc: 'Block is no longer lost at start of turn.' },
   offering: { name: 'Offering', desc: 'Lose 6 HP. Gain 2 Energy. Draw 3 cards. Exhaust.', upgDesc: 'Lose 6 HP. Gain 2 Energy. Draw 5 cards. Exhaust.' },
   demon_form: { name: 'Demon Form', desc: 'Gain 2 Strength at the start of each turn.', upgDesc: 'Gain 3 Strength at the start of each turn.' },
-  reaper: { name: 'Reaper', desc: 'Deal 4 damage to ALL. Heal unblocked damage. Exhaust.', upgDesc: 'Deal 5 damage to ALL. Heal unblocked damage. Exhaust.' },
+  reaper: { name: 'Reaper', desc: 'Deal 6 damage to ALL. Heal unblocked damage. Exhaust.', upgDesc: 'Deal 7 damage to ALL. Heal unblocked damage. Exhaust.' },
   shadow_strike: { name: 'Shadow Strike', desc: 'Deal 6 damage.', upgDesc: 'Deal 9 damage.' },
   shadow_defend: { name: 'Shadow Defend', desc: 'Gain 5 Block.', upgDesc: 'Gain 8 Block.' },
   neutralize: { name: 'Neutralize', desc: 'Deal 3 damage. Apply 1 Weak.', upgDesc: 'Deal 4 damage. Apply 2 Weak.' },
@@ -366,7 +366,7 @@ export const CARD_EN: Record<string, { name: string; desc: string; upgDesc?: str
 };
 
 export const RELIC_EN: Record<string, { name: string; desc: string }> = {
-  burning_blood: { name: 'Burning Blood', desc: 'Heal 6 HP at the end of combat.' },
+  burning_blood: { name: 'Burning Blood', desc: 'Heal 8 HP at the end of combat.' },
   ring_of_snake: { name: 'Ring of the Snake', desc: 'Draw 2 extra cards on Turn 1.' },
   vajra: { name: 'Vajra', desc: 'Start combat with 1 Strength.' },
   anchor: { name: 'Anchor', desc: 'Start combat with 10 Block.' },
@@ -396,11 +396,12 @@ export const ENEMY_EN: Record<string, { name: string; title: string }> = {
   cultist: { name: 'Spire Cultist', title: 'Ritual Apprentice' },
   jaw_worm: { name: 'Jaw Worm', title: 'Armored Predator' },
   acid_slime: { name: 'Acid Slime', title: 'Corrosive Ooze' },
+  acid_slime_small: { name: 'Small Acid Slime', title: 'Corrosive Spawn' },
   looter: { name: 'Spire Looter', title: 'Shadow Cutthroat' },
   bone_knight: { name: 'Bone Knight', title: 'Undead Sentinel' },
   gremlin_nob: { name: 'Gremlin Nob', title: 'Elite · Enraged by Skills' },
   lagavulin: { name: 'Lagavulin', title: 'Elite · Slumbering Shell' },
-  sentry: { name: 'Ancient Sentry', title: 'Elite · Arcane Twin' },
+  sentry: { name: 'Ancient Sentry', title: 'Elite · Arcane Trio' },
   obsidian_warden: { name: 'Obsidian Warden', title: 'Summit Colossus Boss' },
 };
 
@@ -434,9 +435,9 @@ export const EVENT_EN: Record<
     title: 'Whispering Fountain',
     body: 'Silver springwater seeps through ancient stone, rippling with echoes of past climbs. Drinking may mend your body, or test your fortune.',
     options: {
-      drink_deep: { label: 'Drink Deeply', hint: 'Heal 22 HP and gain 1 random Rare card.' },
+      drink_deep: { label: 'Drink Deeply', hint: 'Heal 22 HP and gain 1 random Rare card, but also the curse [Pain].' },
       wash_blades: { label: 'Quench Weapons', hint: 'Gain +6 Max HP permanently.' },
-      toss_coin: { label: 'Toss 25 Gold', hint: 'Gain a Relic, or 50% chance to lose 6 HP & gain 85 Gold.' },
+      toss_coin: { label: 'Toss 60 Gold', hint: '50%: gain a Relic. Otherwise lose 6 HP and gain 85 Gold.' },
     },
   },
   abyssal_altar: {
@@ -465,12 +466,13 @@ export function tIntentLabel(intent: EnemyIntent, locale: Locale): string {
   if (intent.block) parts.push(`Block +${intent.block}`);
   if (intent.gainStrength) parts.push(`Strength +${intent.gainStrength}`);
   if (intent.gainRitual) parts.push(`Ritual +${intent.gainRitual}`);
+  if (intent.grantsEnrage) parts.push('Enrage: your Skills give it +2 Strength');
   if (intent.applyVulnerable) parts.push(`Vulnerable ${intent.applyVulnerable}`);
   if (intent.applyWeak) parts.push(`Weak ${intent.applyWeak}`);
   if (intent.applyFrail) parts.push(`Frail ${intent.applyFrail}`);
   if (intent.addStatusCardId && intent.addStatusCount) {
     const statusEn = CARD_EN[intent.addStatusCardId]?.name || intent.addStatusCardId;
-    parts.push(`+${intent.addStatusCount} ${statusEn}`);
+    parts.push(`+${intent.addStatusCount} ${statusEn}${intent.statusToDrawPile ? ' (draw pile)' : ''}`);
   }
   return parts.join(' · ') || intent.label;
 }
@@ -580,6 +582,10 @@ export function tCombatMsg(msg: CombatMsg, locale: Locale): string {
       const cardName = msg.ref ? tCard(msg.ref, locale).name : '';
       return zh ? `弃牌堆 +${n} ${cardName}` : `+${n} ${cardName} to discard`;
     }
+    case 'statusCardsDraw': {
+      const cardName = msg.ref ? tCard(msg.ref, locale).name : '';
+      return zh ? `抽牌堆 +${n} ${cardName}` : `+${n} ${cardName} into draw pile`;
+    }
     case 'logEnterCombat':
       return zh ? `进入第 ${n} 层战斗` : `Entered combat on floor ${n}`;
     case 'logMercury':
@@ -598,8 +604,8 @@ export function tCombatMsg(msg: CombatMsg, locale: Locale): string {
     case 'logBossPhase2': {
       const name = tEnemyName(msg.ref || '', msg.name || '', locale);
       return zh
-        ? `${name}：熔炉核心超频觉醒！（力量+2、荆棘+2、格挡+16）`
-        : `${name}: forge core overcharged! (Strength +2, Thorns +2, Block +16)`;
+        ? `${name}：熔炉核心超频觉醒！（力量+2、荆棘+1、格挡+10）`
+        : `${name}: forge core overcharged! (Strength +2, Thorns +1, Block +10)`;
     }
     default:
       return '';

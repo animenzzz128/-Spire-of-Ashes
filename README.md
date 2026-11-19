@@ -61,5 +61,14 @@ Build and verify:
 ```bash
 npm run build
 npm run lint
-npx tsx scripts/verify_game.ts
+npm test            # engine verification (scripts/verify_game.ts)
 ```
+
+Balance simulation (a rule-based bot plays full runs on the real engine):
+
+```bash
+npm run sim         # win rates, death floors, HP lost per encounter
+npm run sim:check   # also assert the balance guardrails (runs in CI)
+```
+
+The bot is weaker than a skilled player, so treat its win rates as a lower bound and compare encounters and classes against each other.

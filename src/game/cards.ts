@@ -24,10 +24,10 @@ export const CARD_DEFS: Record<string, CardDef> = {
     rarity: 'starter',
     target: 'self',
     cost: 1,
-    block: 5,
-    upgradedBlock: 8,
-    description: '获得 5 点格挡。',
-    upgradedDescription: '获得 8 点格挡。',
+    block: 6,
+    upgradedBlock: 9,
+    description: '获得 6 点格挡。',
+    upgradedDescription: '获得 9 点格挡。',
     artKey: 'shield',
   },
   bash: {
@@ -54,10 +54,10 @@ export const CARD_DEFS: Record<string, CardDef> = {
     rarity: 'common',
     target: 'all_enemies',
     cost: 1,
-    damage: 8,
-    upgradedDamage: 11,
-    description: '对所有敌人造成 8 点伤害。',
-    upgradedDescription: '对所有敌人造成 11 点伤害。',
+    damage: 9,
+    upgradedDamage: 12,
+    description: '对所有敌人造成 9 点伤害。',
+    upgradedDescription: '对所有敌人造成 12 点伤害。',
     artKey: 'cleave',
   },
   pommel_strike: {
@@ -84,12 +84,12 @@ export const CARD_DEFS: Record<string, CardDef> = {
     rarity: 'common',
     target: 'enemy',
     cost: 1,
-    damage: 5,
-    upgradedDamage: 7,
+    damage: 6,
+    upgradedDamage: 8,
     hits: 2,
     upgradedHits: 2,
-    description: '造成 5 点伤害 2 次。',
-    upgradedDescription: '造成 7 点伤害 2 次。',
+    description: '造成 6 点伤害 2 次。',
+    upgradedDescription: '造成 8 点伤害 2 次。',
     artKey: 'twin',
   },
   shrug_it_off: {
@@ -116,12 +116,12 @@ export const CARD_DEFS: Record<string, CardDef> = {
     rarity: 'common',
     target: 'enemy',
     cost: 1,
-    damage: 5,
-    upgradedDamage: 7,
-    block: 5,
-    upgradedBlock: 7,
-    description: '获得 5 点格挡。造成 5 点伤害。',
-    upgradedDescription: '获得 7 点格挡。造成 7 点伤害。',
+    damage: 6,
+    upgradedDamage: 8,
+    block: 6,
+    upgradedBlock: 8,
+    description: '获得 6 点格挡。造成 6 点伤害。',
+    upgradedDescription: '获得 8 点格挡。造成 8 点伤害。',
     artKey: 'wave',
   },
   body_slam: {
@@ -162,10 +162,10 @@ export const CARD_DEFS: Record<string, CardDef> = {
     rarity: 'uncommon',
     target: 'self',
     cost: 1,
-    gainStrength: 2,
-    upgradedGainStrength: 3,
-    description: '获得 2 点力量。',
-    upgradedDescription: '获得 3 点力量。',
+    gainStrength: 3,
+    upgradedGainStrength: 4,
+    description: '获得 3 点力量。',
+    upgradedDescription: '获得 4 点力量。',
     artKey: 'flame',
   },
   metallicize: {
@@ -327,12 +327,12 @@ export const CARD_DEFS: Record<string, CardDef> = {
     rarity: 'rare',
     target: 'all_enemies',
     cost: 2,
-    damage: 4,
-    upgradedDamage: 5,
+    damage: 6,
+    upgradedDamage: 7,
     lifesteal: true,
     exhaust: true,
-    description: '对所有敌人造成 4 点伤害。回复等同于未被格挡伤害值的生命。消耗。',
-    upgradedDescription: '对所有敌人造成 5 点伤害。回复等同于未被格挡伤害值的生命。消耗。',
+    description: '对所有敌人造成 6 点伤害。回复等同于未被格挡伤害值的生命。消耗。',
+    upgradedDescription: '对所有敌人造成 7 点伤害。回复等同于未被格挡伤害值的生命。消耗。',
     artKey: 'scythe',
   },
 
@@ -841,19 +841,34 @@ export function getRewardPool(heroId: HeroClassId): CardDef[] {
   );
 }
 
-export function rollCardChoices(heroId: HeroClassId, count = 3, eliteBonus = false): CardInstance[] {
+// Card reward rarity. Rares used to be 12% (normal) / 28% (elite) per card,
+// which with ~20-card class pools made every run look alike. `rarePity` is a
+// bonus that grows after rewards without a rare and resets when one appears.
+export const RARE_CHANCE_NORMAL = 0.07;
+export const RARE_CHANCE_ELITE = 0.2;
+export const RARE_PITY_STEP = 0.03;
+export const RARE_PITY_CAP = 0.1;
+
+export function rollCardChoices(
+  heroId: HeroClassId,
+  count = 3,
+  eliteBonus = false,
+  rarePity = 0
+): CardInstance[] {
   const pool = getRewardPool(heroId);
   const pickedIds = new Set<string>();
   const result: CardInstance[] = [];
   let guard = 0;
+  const rareChance = (eliteBonus ? RARE_CHANCE_ELITE : RARE_CHANCE_NORMAL) + rarePity;
+  const uncommonChance = eliteBonus ? 0.4 : 0.36;
 
   while (result.length < count && guard < 100) {
     guard += 1;
     const roll = Math.random();
     let targetRarity: 'common' | 'uncommon' | 'rare' = 'common';
-    if (roll < (eliteBonus ? 0.28 : 0.12)) {
+    if (roll < rareChance) {
       targetRarity = 'rare';
-    } else if (roll < (eliteBonus ? 0.68 : 0.48)) {
+    } else if (roll < rareChance + uncommonChance) {
       targetRarity = 'uncommon';
     }
     const candidates = pool.filter((c) => c.rarity === targetRarity && !pickedIds.has(c.id));
@@ -862,8 +877,8 @@ export function rollCardChoices(heroId: HeroClassId, count = 3, eliteBonus = fal
     if (list.length === 0) break;
     const chosen = list[Math.floor(Math.random() * list.length)];
     pickedIds.add(chosen.id);
-    // Small chance of pre-upgraded card on uncommon/common
-    const preUpgraded = Math.random() < (eliteBonus ? 0.25 : 0.1);
+    // Small chance of a pre-upgraded card
+    const preUpgraded = Math.random() < (eliteBonus ? 0.12 : 0.05);
     result.push(createCardInstance(chosen.id, preUpgraded));
   }
   return result;
