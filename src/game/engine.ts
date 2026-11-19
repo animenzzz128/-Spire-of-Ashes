@@ -148,17 +148,17 @@ export function startCombat(
   }
   const playerStatuses = emptyStatusMap();
 
-  if (hasRelic(state.relics, 'vajra')) playerStatuses.strength += 1;
-  if (hasRelic(state.relics, 'smooth_stone')) playerStatuses.dexterity += 1;
+  if (hasRelic(state.relics, 'ashen_fang')) playerStatuses.strength += 1;
+  if (hasRelic(state.relics, 'featherstep_charm')) playerStatuses.dexterity += 1;
 
   let playerBlock = 0;
-  if (hasRelic(state.relics, 'anchor')) playerBlock += 10;
+  if (hasRelic(state.relics, 'cornerstone')) playerBlock += 10;
 
   let maxEnergy = 3;
-  if (hasRelic(state.relics, 'runic_capacitor')) maxEnergy += 1;
+  if (hasRelic(state.relics, 'ember_core')) maxEnergy += 1;
 
   let turn1Energy = maxEnergy;
-  if (hasRelic(state.relics, 'lantern')) turn1Energy += 1;
+  if (hasRelic(state.relics, 'wayfinder_lamp')) turn1Energy += 1;
 
   // Innate cards first, then shuffle rest
   const deckClone = state.deck.map((c) => ({ ...c }));
@@ -190,19 +190,19 @@ export function startCombat(
   };
 
   let initialDraw = 5;
-  if (hasRelic(state.relics, 'ring_of_snake')) initialDraw += 2;
-  if (hasRelic(state.relics, 'bag_of_prep')) initialDraw += 2;
+  if (hasRelic(state.relics, 'nightweave_ring')) initialDraw += 2;
+  if (hasRelic(state.relics, 'scout_satchel')) initialDraw += 2;
 
   let relicDmgStart = 0;
-  // Mercury Hourglass triggers at start of each turn (including turn 1)
-  if (hasRelic(state.relics, 'mercury_hourglass')) {
+  // Cinder Hourglass triggers at start of each turn (including turn 1)
+  if (hasRelic(state.relics, 'cinder_hourglass')) {
     combat.enemies = combat.enemies.map((e) => {
       const dmg = Math.min(e.hp, 3);
       relicDmgStart += dmg;
       return { ...e, hp: Math.max(0, e.hp - 3) };
     });
     combat.combatDamageDealt = (combat.combatDamageDealt || 0) + relicDmgStart;
-    combat.log.push({ key: 'logMercury', n: 3 });
+    combat.log.push({ key: 'logCinderHourglass', n: 3 });
   }
 
   combat = drawCardsIntoHand(combat, initialDraw);
@@ -400,7 +400,7 @@ function applyDebuffToStatuses(
 function damageEnemy(
   enemy: EnemyInstance,
   rawDamage: number,
-  playerEnvenom: number
+  playerVenomEdge: number
 ): { enemy: EnemyInstance; hpDamage: number; blocked: boolean } {
   if (enemy.hp <= 0) return { enemy, hpDamage: 0, blocked: false };
   let block = enemy.block;
@@ -419,8 +419,8 @@ function damageEnemy(
   }
 
   let statuses = { ...enemy.statuses };
-  if (hpDamage > 0 && playerEnvenom > 0) {
-    const res = applyDebuffToStatuses(statuses, 'poison', playerEnvenom);
+  if (hpDamage > 0 && playerVenomEdge > 0) {
+    const res = applyDebuffToStatuses(statuses, 'poison', playerVenomEdge);
     statuses = res.statuses;
   }
 
@@ -444,7 +444,7 @@ function damageEnemy(
   return { enemy: updated, hpDamage, blocked };
 }
 
-function triggerCorpseExplosionIfNeeded(
+function triggerRotburstIfNeeded(
   enemies: EnemyInstance[],
   alreadyExploded: Set<string>,
   events: FloatingText[]
@@ -456,7 +456,7 @@ function triggerCorpseExplosionIfNeeded(
   while (changed) {
     changed = false;
     for (const dead of updated) {
-      if (dead.hp <= 0 && dead.statuses.corpseExplosion && !alreadyExploded.has(dead.uid)) {
+      if (dead.hp <= 0 && dead.statuses.rotburst && !alreadyExploded.has(dead.uid)) {
         alreadyExploded.add(dead.uid);
         changed = true;
         const boomDmg = dead.maxHp;
@@ -479,7 +479,7 @@ function triggerCorpseExplosionIfNeeded(
 }
 
 // Boss Phase 2 awakens at <= 50% HP. Called after every damage source
-// (cards, Corpse Explosion, potions, poison ticks, Mercury Hourglass) so no
+// (cards, Rotburst, potions, poison ticks, Cinder Hourglass) so no
 // damage type can skip the transition.
 function applyBossPhase2IfNeeded(
   enemy: EnemyInstance,
@@ -537,12 +537,12 @@ function finalizeCombatIfWon(
   // Boss defeated -> Victory!
   let nextHp = state.hp;
   let postHeal = 0;
-  if (hasRelic(state.relics, 'burning_blood')) {
+  if (hasRelic(state.relics, 'bloodfire_sigil')) {
     const h = Math.min(8, state.maxHp - nextHp);
     nextHp += h;
     postHeal += h;
   }
-  if (hasRelic(state.relics, 'meat_on_bone') && nextHp <= Math.floor(state.maxHp / 2)) {
+  if (hasRelic(state.relics, 'hunters_jerky') && nextHp <= Math.floor(state.maxHp / 2)) {
     const h = Math.min(12, state.maxHp - nextHp);
     nextHp += h;
     postHeal += h;
@@ -656,20 +656,20 @@ export function playCard(
     log: [...combat.log],
   };
 
-  // Pain curse check in remaining hand
+  // Marrow Ache curse check in remaining hand
   let hpLostThisAction = 0;
   let hpHealedThisAction = 0;
   let blockGainedThisAction = 0;
   let blockedThisAction = 0;
-  const painCount = nextCombat.hand.filter((c) => CARD_DEFS[c.defId]?.painCurse).length;
-  if (painCount > 0) {
-    const loss = Math.min(nextHp, painCount);
-    nextHp = Math.max(0, nextHp - painCount);
+  const acheCount = nextCombat.hand.filter((c) => CARD_DEFS[c.defId]?.achingCurse).length;
+  if (acheCount > 0) {
+    const loss = Math.min(nextHp, acheCount);
+    nextHp = Math.max(0, nextHp - acheCount);
     hpLostThisAction += loss;
-    events.push({ id: `${Date.now()}_pain`, targetUid: 'player', msg: { key: 'pain', n: painCount }, tone: 'damage' });
+    events.push({ id: `${Date.now()}_ache`, targetUid: 'player', msg: { key: 'curseAche', n: acheCount }, tone: 'damage' });
   }
 
-  // Self HP loss (Bloodletting / Offering)
+  // Self HP loss (Blood Surge / Blood Covenant)
   if (def.loseHp) {
     const loss = Math.min(nextHp, def.loseHp);
     nextHp = Math.max(0, nextHp - def.loseHp);
@@ -705,33 +705,33 @@ export function playCard(
     nextCombat.playerStatuses.dexterity += gainDex;
     events.push({ id: `${Date.now()}_dex`, targetUid: 'player', msg: { key: 'gainDexterity', n: gainDex }, tone: 'buff' });
   }
-  const gainMet = card.upgraded && def.upgradedGainMetallicize !== undefined ? def.upgradedGainMetallicize : def.gainMetallicize || 0;
+  const gainMet = card.upgraded && def.upgradedGainIronhide !== undefined ? def.upgradedGainIronhide : def.gainIronhide || 0;
   if (gainMet > 0) {
-    nextCombat.playerStatuses.metallicize += gainMet;
-    events.push({ id: `${Date.now()}_met`, targetUid: 'player', msg: { key: 'gainMetallicize', n: gainMet }, tone: 'buff' });
+    nextCombat.playerStatuses.ironhide += gainMet;
+    events.push({ id: `${Date.now()}_met`, targetUid: 'player', msg: { key: 'gainIronhide', n: gainMet }, tone: 'buff' });
   }
   const gainArt = card.upgraded && def.upgradedGainArtifact !== undefined ? def.upgradedGainArtifact : def.gainArtifact || 0;
   if (gainArt > 0) {
     nextCombat.playerStatuses.artifact += gainArt;
     events.push({ id: `${Date.now()}_art`, targetUid: 'player', msg: { key: 'gainArtifact', n: gainArt }, tone: 'buff' });
   }
-  if (def.gainBlur) nextCombat.playerStatuses.blur += def.gainBlur;
-  if (def.barricade) nextCombat.playerStatuses.barricade = true;
+  if (def.gainShade) nextCombat.playerStatuses.shade += def.gainShade;
+  if (def.bastion) nextCombat.playerStatuses.bastion = true;
   if (def.doubleNextTurn) nextCombat.playerStatuses.doubleDamageNextTurn = true;
 
-  const demon = card.upgraded && def.upgradedDemonForm !== undefined ? def.upgradedDemonForm : def.demonForm || 0;
-  if (demon > 0) nextCombat.playerStatuses.demonForm += demon;
+  const avatar = card.upgraded && def.upgradedInfernalAvatar !== undefined ? def.upgradedInfernalAvatar : def.infernalAvatar || 0;
+  if (avatar > 0) nextCombat.playerStatuses.infernalAvatar += avatar;
 
-  const fumes = card.upgraded && def.upgradedNoxiousFumes !== undefined ? def.upgradedNoxiousFumes : def.noxiousFumes || 0;
-  if (fumes > 0) nextCombat.playerStatuses.noxiousFumes += fumes;
+  const miasma = card.upgraded && def.upgradedMiasma !== undefined ? def.upgradedMiasma : def.miasma || 0;
+  if (miasma > 0) nextCombat.playerStatuses.miasma += miasma;
 
-  if (def.envenom) nextCombat.playerStatuses.envenom += def.envenom;
+  if (def.venomEdge) nextCombat.playerStatuses.venomEdge += def.venomEdge;
 
-  // Gremlin Nob Enrage trigger when playing a Skill card
+  // Cinderhorn Brute enrage trigger when playing a Skill card
   if (def.type === 'skill') {
     nextCombat.enemies = nextCombat.enemies.map((e) => {
       if (e.hp > 0 && e.enraged) {
-        events.push({ id: `${Date.now()}_nob`, targetUid: e.uid, msg: { key: 'enrage', n: 2 }, tone: 'buff' });
+        events.push({ id: `${Date.now()}_brute`, targetUid: e.uid, msg: { key: 'enrage', n: 2 }, tone: 'buff' });
         return { ...e, statuses: { ...e.statuses, strength: e.statuses.strength + 2 } };
       }
       return e;
@@ -759,7 +759,7 @@ export function playCard(
       hitEnemyUids.push(enemy.uid);
       for (let h = 0; h < hits; h++) {
         if (enemy.hp <= 0) break;
-        const dmgRes = damageEnemy(enemy, targetPreview.perHit, nextCombat.playerStatuses.envenom);
+        const dmgRes = damageEnemy(enemy, targetPreview.perHit, nextCombat.playerStatuses.venomEdge);
         enemy = dmgRes.enemy;
         totalDealtThisCard += dmgRes.hpDamage;
         if (def.lifesteal) totalLifesteal += dmgRes.hpDamage;
@@ -833,29 +833,29 @@ export function playCard(
         events.push({ id: `${Date.now()}_dp_${idx}`, targetUid: enemy.uid, msg: { key: 'applyPoison', n: added }, tone: 'poison' });
       }
 
-      if (def.corpseExplosion) {
-        enemy.statuses = { ...enemy.statuses, corpseExplosion: true };
-        events.push({ id: `${Date.now()}_ce_${idx}`, targetUid: enemy.uid, msg: { key: 'corpseMark' }, tone: 'poison' });
+      if (def.rotburst) {
+        enemy.statuses = { ...enemy.statuses, rotburst: true };
+        events.push({ id: `${Date.now()}_ce_${idx}`, targetUid: enemy.uid, msg: { key: 'rotburstMark' }, tone: 'poison' });
       }
     }
 
     nextCombat.enemies[idx] = enemy;
   }
 
-  // Shuriken & Kunai relic triggers after every 3rd attack resolves
+  // Notched Blade & Fleet Ribbon relic triggers after every 3rd attack resolves
   if (def.type === 'attack' && nextCombat.attacksPlayedThisTurn % 3 === 0) {
-    if (hasRelic(state.relics, 'shuriken')) {
+    if (hasRelic(state.relics, 'notched_blade')) {
       nextCombat.playerStatuses.strength += 1;
-      events.push({ id: `${Date.now()}_shur`, targetUid: 'player', msg: { key: 'shuriken', n: 1 }, tone: 'buff' });
+      events.push({ id: `${Date.now()}_shur`, targetUid: 'player', msg: { key: 'notchedBlade', n: 1 }, tone: 'buff' });
     }
-    if (hasRelic(state.relics, 'kunai')) {
+    if (hasRelic(state.relics, 'fleet_ribbon')) {
       nextCombat.playerStatuses.dexterity += 1;
-      events.push({ id: `${Date.now()}_kuna`, targetUid: 'player', msg: { key: 'kunai', n: 1 }, tone: 'buff' });
+      events.push({ id: `${Date.now()}_kuna`, targetUid: 'player', msg: { key: 'fleetRibbon', n: 1 }, tone: 'buff' });
     }
   }
 
-  // Trigger Corpse Explosion chain if any marked enemy died
-  const ceRes = triggerCorpseExplosionIfNeeded(nextCombat.enemies, new Set(), events);
+  // Trigger Rotburst chain if any marked enemy died
+  const ceRes = triggerRotburstIfNeeded(nextCombat.enemies, new Set(), events);
   nextCombat.enemies = applyBossPhase2ToAll(ceRes.enemies, events, nextCombat.log);
 
   // Lifesteal heal
@@ -873,7 +873,7 @@ export function playCard(
   if (drawCount > 0) {
     nextCombat = drawCardsIntoHand(nextCombat, drawCount);
   }
-  // Battle Trance: lock further draws only after its own draw has resolved.
+  // Tunnel Vision: lock further draws only after its own draw has resolved.
   if (def.noMoreDraw) {
     nextCombat = {
       ...nextCombat,
@@ -881,22 +881,22 @@ export function playCard(
     };
   }
 
-  // Add Shivs
-  const shivCount = card.upgraded && def.upgradedAddShivs !== undefined ? def.upgradedAddShivs : def.addShivs || 0;
-  for (let i = 0; i < shivCount; i++) {
+  // Add Throwing Knives
+  const knifeCount = card.upgraded && def.upgradedAddKnives !== undefined ? def.upgradedAddKnives : def.addKnives || 0;
+  for (let i = 0; i < knifeCount; i++) {
     if (nextCombat.hand.length < 10) {
-      nextCombat.hand.push(createCardInstance('shiv', false));
+      nextCombat.hand.push(createCardInstance('throwing_knife', false));
     } else {
-      nextCombat.discardPile.push(createCardInstance('shiv', false));
+      nextCombat.discardPile.push(createCardInstance('throwing_knife', false));
     }
   }
 
-  // Apotheosis: upgrade all cards in combat
-  if (def.apotheosis) {
+  // Molten Epiphany: upgrade all cards in combat
+  if (def.upgradeAllInCombat) {
     nextCombat.hand = nextCombat.hand.map((c) => ({ ...c, upgraded: true }));
     nextCombat.drawPile = nextCombat.drawPile.map((c) => ({ ...c, upgraded: true }));
     nextCombat.discardPile = nextCombat.discardPile.map((c) => ({ ...c, upgraded: true }));
-    events.push({ id: `${Date.now()}_apo`, targetUid: 'player', msg: { key: 'apotheosis' }, tone: 'buff' });
+    events.push({ id: `${Date.now()}_apo`, targetUid: 'player', msg: { key: 'upgradeAll' }, tone: 'buff' });
   }
 
   // Exhaust vs Discard vs Power
@@ -909,7 +909,7 @@ export function playCard(
     nextCombat.discardPile.push(card);
   }
 
-  // Check Pending Discard (Survivor / Acrobatics)
+  // Check Pending Discard (Last Refuge / Sleight of Hand)
   if (def.discardCount && def.discardCount > 0 && nextCombat.hand.length > 0 && !nextCombat.enemies.every((e) => e.hp <= 0)) {
     nextCombat.pendingDiscard = {
       sourceCardUid: card.uid,
@@ -957,7 +957,7 @@ export function playCard(
     damageByCard: updatedCardStats,
   };
 
-  // Check Player Death (from Bloodletting / Offering / Thorns / Pain)
+  // Check Player Death (from Blood Surge / Blood Covenant / Thorns / Marrow Ache)
   if (nextHp <= 0) {
     return {
       state: {
@@ -1024,7 +1024,7 @@ export function usePotion(
   let potionDmg = 0;
   let potionBlock = 0;
 
-  if (potion.id === 'heal_potion') {
+  if (potion.id === 'heartblood_elixir') {
     const healed = Math.min(15, state.maxHp - state.hp);
     nextPotions[slotIndex] = null;
     events.push({ id: `${Date.now()}_hp_pot`, targetUid: 'player', msg: { key: 'heal', n: healed }, tone: 'heal' });
@@ -1055,15 +1055,15 @@ export function usePotion(
     if (!target) return { state, events: [] };
     const idx = nextCombat.enemies.findIndex((e) => e.uid === target.uid);
 
-    if (potion.id === 'fire_potion') {
+    if (potion.id === 'wildfire_flask') {
       const dmgRes = damageEnemy(target, 20, 0);
       potionDmg += dmgRes.hpDamage;
       nextCombat.enemies[idx] = dmgRes.enemy;
       events.push({ id: `${Date.now()}_fp`, targetUid: target.uid, msg: { key: 'damage', n: dmgRes.hpDamage }, tone: 'damage' });
-      const ceRes = triggerCorpseExplosionIfNeeded(nextCombat.enemies, new Set(), events);
+      const ceRes = triggerRotburstIfNeeded(nextCombat.enemies, new Set(), events);
       nextCombat.enemies = ceRes.enemies;
       potionDmg += ceRes.explosionDamage;
-    } else if (potion.id === 'poison_potion') {
+    } else if (potion.id === 'nightshade_vial') {
       const res = applyDebuffToStatuses(target.statuses, 'poison', 6);
       nextCombat.enemies[idx] = { ...target, statuses: res.statuses };
       events.push({
@@ -1074,17 +1074,17 @@ export function usePotion(
       });
     }
   } else {
-    if (potion.id === 'block_potion') {
+    if (potion.id === 'stoneskin_tonic') {
       nextCombat.playerBlock += 12;
       potionBlock += 12;
       events.push({ id: `${Date.now()}_bp`, targetUid: 'player', msg: { key: 'gainBlock', n: 12 }, tone: 'block' });
-    } else if (potion.id === 'strength_potion') {
+    } else if (potion.id === 'berserker_draught') {
       nextCombat.playerStatuses.strength += 2;
       events.push({ id: `${Date.now()}_sp`, targetUid: 'player', msg: { key: 'gainStrength', n: 2 }, tone: 'buff' });
-    } else if (potion.id === 'energy_potion') {
+    } else if (potion.id === 'kindling_elixir') {
       nextCombat.energy += 2;
       events.push({ id: `${Date.now()}_ep`, targetUid: 'player', msg: { key: 'gainEnergy', n: 2 }, tone: 'buff' });
-    } else if (potion.id === 'swift_potion') {
+    } else if (potion.id === 'haste_tincture') {
       nextCombat = drawCardsIntoHand(nextCombat, 3);
       events.push({ id: `${Date.now()}_swp`, targetUid: 'player', msg: { key: 'draw', n: 3 }, tone: 'buff' });
     }
@@ -1147,19 +1147,19 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     events.push({ id: `${Date.now()}_burn`, targetUid: 'player', msg: { key: 'burn', n: burnDmg }, tone: 'damage' });
   }
 
-  // Orichalcum relic & Metallicize power
-  if (hasRelic(state.relics, 'orichalcum') && nextCombat.playerBlock === 0) {
+  // Cinderglass Ward relic & Ironhide power
+  if (hasRelic(state.relics, 'cinderglass_ward') && nextCombat.playerBlock === 0) {
     nextCombat.playerBlock += 6;
     blockGainedTurn += 6;
-    events.push({ id: `${Date.now()}_ori`, targetUid: 'player', msg: { key: 'orichalcum', n: 6 }, tone: 'block' });
+    events.push({ id: `${Date.now()}_ori`, targetUid: 'player', msg: { key: 'cinderglassWard', n: 6 }, tone: 'block' });
   }
-  if (nextCombat.playerStatuses.metallicize > 0) {
-    nextCombat.playerBlock += nextCombat.playerStatuses.metallicize;
-    blockGainedTurn += nextCombat.playerStatuses.metallicize;
+  if (nextCombat.playerStatuses.ironhide > 0) {
+    nextCombat.playerBlock += nextCombat.playerStatuses.ironhide;
+    blockGainedTurn += nextCombat.playerStatuses.ironhide;
     events.push({
       id: `${Date.now()}_met_end`,
       targetUid: 'player',
-      msg: { key: 'gainBlock', n: nextCombat.playerStatuses.metallicize },
+      msg: { key: 'gainBlock', n: nextCombat.playerStatuses.ironhide },
       tone: 'block',
     });
   }
@@ -1221,19 +1221,19 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       events.push({ id: `${Date.now()}_pt_${i}`, targetUid: enemy.uid, msg: { key: 'poisonTick', n: pDmg }, tone: 'poison' });
       if (enemy.hp <= 0) {
         nextCombat.enemies[i] = enemy;
-        const ceRes = triggerCorpseExplosionIfNeeded(nextCombat.enemies, explodedSet, events);
+        const ceRes = triggerRotburstIfNeeded(nextCombat.enemies, explodedSet, events);
         nextCombat.enemies = ceRes.enemies;
         poisonDmgTurn += ceRes.explosionDamage;
         continue;
       }
     }
 
-    // Enemy clears previous block (unless asleep) and applies Metallicize
+    // Enemy clears previous block (unless asleep) and applies Ironhide
     if (!enemy.asleep) {
       enemy.block = 0;
     }
-    if (enemy.statuses.metallicize > 0) {
-      enemy.block += enemy.statuses.metallicize;
+    if (enemy.statuses.ironhide > 0) {
+      enemy.block += enemy.statuses.ironhide;
     }
     // A poison tick may have pushed the boss to half HP; check after the block
     // reset so the phase-2 block survives into the player's next turn.
@@ -1274,13 +1274,13 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       enemy.statuses.strength += intent.gainStrength;
       events.push({ id: `${Date.now()}_estr_${i}`, targetUid: enemy.uid, msg: { key: 'gainStrength', n: intent.gainStrength }, tone: 'buff' });
     }
-    if (intent.gainRitual) {
-      enemy.statuses.ritual += intent.gainRitual;
-      events.push({ id: `${Date.now()}_erit_${i}`, targetUid: enemy.uid, msg: { key: 'gainRitual', n: intent.gainRitual }, tone: 'buff' });
+    if (intent.gainZeal) {
+      enemy.statuses.zeal += intent.gainZeal;
+      events.push({ id: `${Date.now()}_erit_${i}`, targetUid: enemy.uid, msg: { key: 'gainZeal', n: intent.gainZeal }, tone: 'buff' });
     }
-    if (intent.gainMetallicize) {
-      enemy.statuses.metallicize += intent.gainMetallicize;
-      enemy.block += intent.gainMetallicize;
+    if (intent.gainIronhide) {
+      enemy.statuses.ironhide += intent.gainIronhide;
+      enemy.block += intent.gainIronhide;
     }
 
     // Enemy Debuffs on Player
@@ -1339,16 +1339,16 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       enemy.enraged = true;
     }
 
-    // End of enemy turn: Ritual grants Strength, decrement enemy Vulnerable/Weak
-    if (enemy.statuses.ritual > 0) {
-      enemy.statuses.strength += enemy.statuses.ritual;
+    // End of enemy turn: Zeal grants Strength, decrement enemy Vulnerable/Weak
+    if (enemy.statuses.zeal > 0) {
+      enemy.statuses.strength += enemy.statuses.zeal;
     }
     if (enemy.statuses.vulnerable > 0) enemy.statuses.vulnerable -= 1;
     if (enemy.statuses.weak > 0) enemy.statuses.weak -= 1;
 
-    // Advance enemy turn counter & wake up Lagavulin on Turn 3
+    // Advance enemy turn counter & wake up the Slumbering Gargoyle on Turn 3
     enemy.turnCount += 1;
-    if (enemy.defId === 'lagavulin' && enemy.turnCount >= 3) {
+    if (enemy.defId === 'slumbering_gargoyle' && enemy.turnCount >= 3) {
       enemy.asleep = false;
     }
     enemy.intent = computeEnemyNextIntent(enemy, enemy.turnCount);
@@ -1368,7 +1368,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     hpLost: state.stats.hpLost + hpLostTurn,
   };
 
-  // Check if enemies died from Poison or Corpse Explosion
+  // Check if enemies died from Poison or Rotburst
   const wonCheck = finalizeCombatIfWon({ ...state, hp: nextHp, stats: midStats }, nextCombat, events);
   if (wonCheck.state.phase !== 'COMBAT') {
     return { ...wonCheck, hitPlayer };
@@ -1390,44 +1390,44 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
   nextCombat.cardsPlayedThisTurn = 0;
   nextCombat.playerStatuses.noDrawThisTurn = false;
 
-  // Player Block preservation check (Barricade or Blur)
-  if (!nextCombat.playerStatuses.barricade) {
-    if (nextCombat.playerStatuses.blur > 0) {
-      nextCombat.playerStatuses.blur -= 1;
+  // Player Block preservation check (Bastion or Shade)
+  if (!nextCombat.playerStatuses.bastion) {
+    if (nextCombat.playerStatuses.shade > 0) {
+      nextCombat.playerStatuses.shade -= 1;
     } else {
       nextCombat.playerBlock = 0;
     }
   }
 
   let turnStartBlock = 0;
-  // Horn Cleat relic on Turn 2
-  if (nextCombat.turn === 2 && hasRelic(state.relics, 'horn_cleat')) {
+  // Watchman's Horn relic on Turn 2
+  if (nextCombat.turn === 2 && hasRelic(state.relics, 'watchman_horn')) {
     nextCombat.playerBlock += 14;
     turnStartBlock += 14;
-    events.push({ id: `${Date.now()}_hc`, targetUid: 'player', msg: { key: 'hornCleat', n: 14 }, tone: 'block' });
+    events.push({ id: `${Date.now()}_hc`, targetUid: 'player', msg: { key: 'watchmanHorn', n: 14 }, tone: 'block' });
   }
 
-  // Phantasmal Killer double damage activation
+  // Night Terror double damage activation
   if (nextCombat.playerStatuses.doubleDamageNextTurn) {
     nextCombat.doubleDamageActive = true;
     nextCombat.playerStatuses.doubleDamageNextTurn = false;
-    events.push({ id: `${Date.now()}_pk`, targetUid: 'player', msg: { key: 'phantasmal' }, tone: 'buff' });
+    events.push({ id: `${Date.now()}_pk`, targetUid: 'player', msg: { key: 'nightTerror' }, tone: 'buff' });
   } else {
     nextCombat.doubleDamageActive = false;
   }
 
-  // Demon Form & Noxious Fumes & Mercury Hourglass
-  if (nextCombat.playerStatuses.demonForm > 0) {
-    nextCombat.playerStatuses.strength += nextCombat.playerStatuses.demonForm;
+  // Infernal Avatar & Creeping Miasma & Cinder Hourglass
+  if (nextCombat.playerStatuses.infernalAvatar > 0) {
+    nextCombat.playerStatuses.strength += nextCombat.playerStatuses.infernalAvatar;
     events.push({
       id: `${Date.now()}_df`,
       targetUid: 'player',
-      msg: { key: 'demonForm', n: nextCombat.playerStatuses.demonForm },
+      msg: { key: 'infernalAvatar', n: nextCombat.playerStatuses.infernalAvatar },
       tone: 'buff',
     });
   }
-  if (nextCombat.playerStatuses.noxiousFumes > 0) {
-    const nf = nextCombat.playerStatuses.noxiousFumes;
+  if (nextCombat.playerStatuses.miasma > 0) {
+    const nf = nextCombat.playerStatuses.miasma;
     nextCombat.enemies = nextCombat.enemies.map((e) => {
       if (e.hp <= 0) return e;
       const res = applyDebuffToStatuses(e.statuses, 'poison', nf);
@@ -1440,14 +1440,14 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
       return { ...e, statuses: res.statuses };
     });
   }
-  if (hasRelic(state.relics, 'mercury_hourglass')) {
+  if (hasRelic(state.relics, 'cinder_hourglass')) {
     nextCombat.enemies = nextCombat.enemies.map((e) => {
       if (e.hp <= 0) return e;
       const d = Math.min(e.hp, 3);
       relicDmgTurn += d;
       return { ...e, hp: Math.max(0, e.hp - 3) };
     });
-    const ceRelic = triggerCorpseExplosionIfNeeded(nextCombat.enemies, explodedSet, events);
+    const ceRelic = triggerRotburstIfNeeded(nextCombat.enemies, explodedSet, events);
     nextCombat.enemies = applyBossPhase2ToAll(ceRelic.enemies, events, nextCombat.log);
     relicDmgTurn += ceRelic.explosionDamage;
   }
@@ -1468,7 +1468,7 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     blockGained: midStats.blockGained + turnStartBlock,
   };
 
-  // Check if Mercury Hourglass killed remaining enemies
+  // Check if Cinder Hourglass killed remaining enemies
   const finalCheck = finalizeCombatIfWon({ ...state, hp: nextHp, stats: endStats }, nextCombat, events);
   return {
     ...finalCheck,

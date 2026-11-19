@@ -6,7 +6,7 @@ import { rollRelic } from './relics';
 export function generateSpireEvent(state: RunState): EventState {
   const templates: (() => EventState)[] = [
     () => ({
-      id: 'golden_idol',
+      id: 'ember_shrine',
       title: '余烬神龛',
       body: '走廊尽头的黑曜石壁龛中供奉着一尊熔金雕像，基座下方隐约传来机关齿轮的咔嗒声。你可以伸手摘取金像，或者向神龛献上一缕鲜血祈求祝福。',
       resolved: false,
@@ -91,9 +91,9 @@ export function generateSpireEvent(state: RunState): EventState {
           disabled: state.hp <= 12,
         },
         {
-          id: 'claim_apotheosis',
-          label: '抄录神化卷轴',
-          hint: '失去 10 点生命与 30 金币，获得稀有无色牌【神化升华】。',
+          id: 'claim_epiphany',
+          label: '抄录顿悟卷轴',
+          hint: '失去 10 点生命与 30 金币，获得稀有无色牌【熔心顿悟】。',
           disabled: state.hp <= 10 || state.gold < 30,
         },
         {
@@ -211,16 +211,16 @@ export function resolveEventOption(state: RunState, optionId: string): RunState 
       next.stats.hpHealed += healed;
       const rares = getRewardPool(next.heroId).filter((c) => c.rarity === 'rare');
       const picked = rares[Math.floor(Math.random() * rares.length)];
-      // The fountain's price: a permanent Pain curse (previously this option had no downside).
-      next.deck.push(createCardInstance('pain', false));
+      // The fountain's price: a permanent Marrow Ache curse (previously this option had no downside).
+      next.deck.push(createCardInstance('marrow_ache', false));
       if (picked) {
         next.deck.push(createCardInstance(picked.id, false));
         const pickedEn = CARD_EN[picked.id]?.name || picked.name;
         outcome = `清冽泉水回复了 ${healed} 点生命，你在泉底习得了稀有卡牌【${picked.name}】，但幻影的低语化作诅咒【蚀骨痛楚】缠上了你。`;
-        outcomeEn = `The spring restores ${healed} HP and reveals a Rare card: [${pickedEn}], but its whispers bind you with the curse [Pain].`;
+        outcomeEn = `The spring restores ${healed} HP and reveals a Rare card: [${pickedEn}], but its whispers bind you with the curse [Marrow Ache].`;
       } else {
         outcome = `清冽泉水回复了 ${healed} 点生命，但幻影的低语化作诅咒【蚀骨痛楚】缠上了你。`;
-        outcomeEn = `The spring restores ${healed} HP, but its whispers bind you with the curse [Pain].`;
+        outcomeEn = `The spring restores ${healed} HP, but its whispers bind you with the curse [Marrow Ache].`;
       }
       break;
     }
@@ -262,14 +262,14 @@ export function resolveEventOption(state: RunState, optionId: string): RunState 
       outcomeEn = `Crimson stains the altar. You take 12 damage and claim [${relicEn?.name || relic.name}]!`;
       break;
     }
-    case 'claim_apotheosis': {
+    case 'claim_epiphany': {
       const lost = Math.min(Math.max(0, next.hp - 1), 10);
       next.hp = Math.max(1, next.hp - 10);
       next.stats.hpLost += lost;
       next.gold -= 30;
-      next.deck.push(createCardInstance('apotheosis', false));
-      outcome = '你强忍灼痛抄录完毕，稀有无色牌【神化升华】已加入牌组！';
-      outcomeEn = 'Through searing heat you transcribe the scroll. [Apotheosis] is added to your deck!';
+      next.deck.push(createCardInstance('molten_epiphany', false));
+      outcome = '你强忍灼痛抄录完毕，稀有无色牌【熔心顿悟】已加入牌组！';
+      outcomeEn = 'Through searing heat you transcribe the scroll. [Molten Epiphany] is added to your deck!';
       break;
     }
     default: {

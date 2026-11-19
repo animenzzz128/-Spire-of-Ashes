@@ -19,7 +19,7 @@ const KEYWORDS_ZH = [
   { term: '中毒 (Poison)', desc: '敌人回合开始时失去等同中毒层数的生命（无视格挡），随后中毒层数减 1。' },
   { term: '人工制品 (Artifact)', desc: '抵消下一次被施加的负面状态（易伤、虚弱、脆弱或中毒）。' },
   { term: '消耗 (Exhaust)', desc: '打出后进入消耗堆，本场战斗内不再回到抽牌堆或弃牌堆。' },
-  { term: '金属化 / 荆棘', desc: '金属化每回合自动获得格挡；荆棘在受到攻击时对攻击者反弹伤害。' },
+  { term: '铁肤 / 荆棘', desc: '铁肤每回合自动获得格挡；荆棘在受到攻击时对攻击者反弹伤害。' },
 ];
 
 const KEYWORDS_EN = [
@@ -32,7 +32,7 @@ const KEYWORDS_EN = [
   { term: 'Poison', desc: 'At the start of enemy turn, loses HP equal to Poison (ignores Block), then decrements by 1.' },
   { term: 'Artifact', desc: 'Negates the next debuff applied (Vulnerable, Weak, Frail, or Poison).' },
   { term: 'Exhaust', desc: 'Removed from rotation until the end of the current combat (not permanently lost).' },
-  { term: 'Metallicize / Thorns', desc: 'Metallicize grants Block automatically each turn; Thorns deals damage back to attackers.' },
+  { term: 'Ironhide / Thorns', desc: 'Ironhide grants Block automatically each turn; Thorns deals damage back to attackers.' },
 ];
 
 export const GlossaryModal: React.FC<GlossaryModalProps> = ({ locale, onClose }) => {

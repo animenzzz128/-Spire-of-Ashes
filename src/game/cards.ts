@@ -30,8 +30,8 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '获得 9 点格挡。',
     artKey: 'shield',
   },
-  bash: {
-    id: 'bash',
+  armor_breaker: {
+    id: 'armor_breaker',
     name: '破甲重击',
     pool: 'ironwarden',
     type: 'attack',
@@ -46,8 +46,8 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '造成 10 点伤害。给予 3 层易伤。',
     artKey: 'hammer',
   },
-  cleave: {
-    id: 'cleave',
+  sweep_the_ranks: {
+    id: 'sweep_the_ranks',
     name: '横扫千军',
     pool: 'ironwarden',
     type: 'attack',
@@ -58,11 +58,11 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDamage: 12,
     description: '对所有敌人造成 9 点伤害。',
     upgradedDescription: '对所有敌人造成 12 点伤害。',
-    artKey: 'cleave',
+    artKey: 'broad_arc',
   },
-  pommel_strike: {
-    id: 'pommel_strike',
-    name: '剑柄突刺',
+  hilt_jab: {
+    id: 'hilt_jab',
+    name: '回柄快击',
     pool: 'ironwarden',
     type: 'attack',
     rarity: 'common',
@@ -76,9 +76,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '造成 10 点伤害。抽 2 张牌。',
     artKey: 'strike_draw',
   },
-  twin_strike: {
-    id: 'twin_strike',
-    name: '双重斩击',
+  double_hew: {
+    id: 'double_hew',
+    name: '连环劈砍',
     pool: 'ironwarden',
     type: 'attack',
     rarity: 'common',
@@ -92,9 +92,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '造成 8 点伤害 2 次。',
     artKey: 'twin',
   },
-  shrug_it_off: {
-    id: 'shrug_it_off',
-    name: '耸肩卸力',
+  weather_the_blow: {
+    id: 'weather_the_blow',
+    name: '咬牙硬抗',
     pool: 'ironwarden',
     type: 'skill',
     rarity: 'common',
@@ -108,9 +108,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '获得 11 点格挡。抽 1 张牌。',
     artKey: 'shield_draw',
   },
-  iron_wave: {
-    id: 'iron_wave',
-    name: '铁波涌动',
+  guarded_blow: {
+    id: 'guarded_blow',
+    name: '守势反击',
     pool: 'ironwarden',
     type: 'attack',
     rarity: 'common',
@@ -124,8 +124,8 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '获得 8 点格挡。造成 8 点伤害。',
     artKey: 'wave',
   },
-  body_slam: {
-    id: 'body_slam',
+  shield_ram: {
+    id: 'shield_ram',
     name: '铁壁冲撞',
     pool: 'ironwarden',
     type: 'attack',
@@ -138,8 +138,8 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '造成等同于你当前格挡值的伤害。',
     artKey: 'slam',
   },
-  heavy_blade: {
-    id: 'heavy_blade',
+  crushing_maul: {
+    id: 'crushing_maul',
     name: '重锤绝杀',
     pool: 'ironwarden',
     type: 'attack',
@@ -154,8 +154,8 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '造成 14 点伤害。力量在此牌上发挥 5 倍效果。',
     artKey: 'heavy',
   },
-  inflame: {
-    id: 'inflame',
+  kindled_fury: {
+    id: 'kindled_fury',
     name: '炽焰战意',
     pool: 'ironwarden',
     type: 'power',
@@ -168,22 +168,22 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '获得 4 点力量。',
     artKey: 'flame',
   },
-  metallicize: {
-    id: 'metallicize',
+  heavy_mail: {
+    id: 'heavy_mail',
     name: '身披重铠',
     pool: 'ironwarden',
     type: 'power',
     rarity: 'uncommon',
     target: 'self',
     cost: 1,
-    gainMetallicize: 3,
-    upgradedGainMetallicize: 4,
+    gainIronhide: 3,
+    upgradedGainIronhide: 4,
     description: '每回合结束时，获得 3 点格挡。',
     upgradedDescription: '每回合结束时，获得 4 点格挡。',
     artKey: 'armor',
   },
-  bloodletting: {
-    id: 'bloodletting',
+  blood_surge: {
+    id: 'blood_surge',
     name: '燃血狂涌',
     pool: 'ironwarden',
     type: 'skill',
@@ -197,9 +197,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '失去 3 点生命。获得 3 点能量。',
     artKey: 'blood',
   },
-  battle_trance: {
-    id: 'battle_trance',
-    name: '战斗专注',
+  tunnel_vision: {
+    id: 'tunnel_vision',
+    name: '心无旁骛',
     pool: 'ironwarden',
     type: 'skill',
     rarity: 'uncommon',
@@ -212,8 +212,8 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '抽 4 张牌。本回合内你不能再抽牌。',
     artKey: 'focus',
   },
-  intimidate: {
-    id: 'intimidate',
+  daunting_roar: {
+    id: 'daunting_roar',
     name: '战吼震慑',
     pool: 'ironwarden',
     type: 'skill',
@@ -227,9 +227,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '给予所有敌人 2 层虚弱。消耗。',
     artKey: 'roar',
   },
-  whirlwind: {
-    id: 'whirlwind',
-    name: '烈风旋斩',
+  blade_cyclone: {
+    id: 'blade_cyclone',
+    name: '刀刃飓风',
     pool: 'ironwarden',
     type: 'attack',
     rarity: 'uncommon',
@@ -241,9 +241,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '消耗全部能量，对所有敌人造成 8 点伤害 X 次。',
     artKey: 'whirl',
   },
-  uppercut: {
-    id: 'uppercut',
-    name: '上勾崩拳',
+  jawbreaker: {
+    id: 'jawbreaker',
+    name: '碎颌重拳',
     pool: 'ironwarden',
     type: 'attack',
     rarity: 'uncommon',
@@ -259,8 +259,8 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '造成 13 点伤害。给予 2 层虚弱和 2 层易伤。',
     artKey: 'fist',
   },
-  impervious: {
-    id: 'impervious',
+  mountain_stand: {
+    id: 'mountain_stand',
     name: '不动如山',
     pool: 'ironwarden',
     type: 'skill',
@@ -274,22 +274,22 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '获得 40 点格挡。消耗。',
     artKey: 'fortress',
   },
-  barricade: {
-    id: 'barricade',
-    name: '永恒壁垒',
+  eternal_bastion: {
+    id: 'eternal_bastion',
+    name: '永恒堡垒',
     pool: 'ironwarden',
     type: 'power',
     rarity: 'rare',
     target: 'self',
     cost: 3,
     upgradedCost: 2,
-    barricade: true,
+    bastion: true,
     description: '格挡不再在回合开始时消失。',
     upgradedDescription: '格挡不再在回合开始时消失。',
     artKey: 'bastion',
   },
-  offering: {
-    id: 'offering',
+  blood_covenant: {
+    id: 'blood_covenant',
     name: '血祭契约',
     pool: 'ironwarden',
     type: 'skill',
@@ -303,24 +303,24 @@ export const CARD_DEFS: Record<string, CardDef> = {
     exhaust: true,
     description: '失去 6 点生命。获得 2 点能量。抽 3 张牌。消耗。',
     upgradedDescription: '失去 6 点生命。获得 2 点能量。抽 5 张牌。消耗。',
-    artKey: 'ritual',
+    artKey: 'covenant',
   },
-  demon_form: {
-    id: 'demon_form',
-    name: '恶魔化身',
+  infernal_avatar: {
+    id: 'infernal_avatar',
+    name: '炼狱化身',
     pool: 'ironwarden',
     type: 'power',
     rarity: 'rare',
     target: 'self',
     cost: 3,
-    demonForm: 2,
-    upgradedDemonForm: 3,
+    infernalAvatar: 2,
+    upgradedInfernalAvatar: 3,
     description: '每回合开始时，获得 2 点力量。',
     upgradedDescription: '每回合开始时，获得 3 点力量。',
-    artKey: 'demon',
+    artKey: 'infernal',
   },
-  reaper: {
-    id: 'reaper',
+  soul_harvest: {
+    id: 'soul_harvest',
     name: '灵魂收割',
     pool: 'ironwarden',
     type: 'attack',
@@ -365,9 +365,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '获得 8 点格挡。',
     artKey: 'cloak',
   },
-  neutralize: {
-    id: 'neutralize',
-    name: '虚弱中和',
+  sapping_cut: {
+    id: 'sapping_cut',
+    name: '卸力刺',
     pool: 'shadowweaver',
     type: 'attack',
     rarity: 'starter',
@@ -379,10 +379,10 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedApplyWeak: 2,
     description: '造成 3 点伤害。给予 1 层虚弱。',
     upgradedDescription: '造成 4 点伤害。给予 2 层虚弱。',
-    artKey: 'neutralize',
+    artKey: 'sap',
   },
-  survivor: {
-    id: 'survivor',
+  last_refuge: {
+    id: 'last_refuge',
     name: '绝境求生',
     pool: 'shadowweaver',
     type: 'skill',
@@ -394,11 +394,11 @@ export const CARD_DEFS: Record<string, CardDef> = {
     discardCount: 1,
     description: '获得 8 点格挡。丢弃 1 张手牌。',
     upgradedDescription: '获得 11 点格挡。丢弃 1 张手牌。',
-    artKey: 'survivor',
+    artKey: 'refuge',
   },
-  poisoned_stab: {
-    id: 'poisoned_stab',
-    name: '淬毒刺击',
+  viper_lunge: {
+    id: 'viper_lunge',
+    name: '蛇牙突刺',
     pool: 'shadowweaver',
     type: 'attack',
     rarity: 'common',
@@ -412,9 +412,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '造成 8 点伤害。给予 4 层中毒。',
     artKey: 'poison_blade',
   },
-  deadly_poison: {
-    id: 'deadly_poison',
-    name: '致命剧毒',
+  black_ichor: {
+    id: 'black_ichor',
+    name: '黑血毒液',
     pool: 'shadowweaver',
     type: 'skill',
     rarity: 'common',
@@ -426,22 +426,22 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '给予 7 层中毒。',
     artKey: 'vial',
   },
-  blade_dance: {
-    id: 'blade_dance',
-    name: '刀刃之舞',
+  sleeve_knives: {
+    id: 'sleeve_knives',
+    name: '袖里藏锋',
     pool: 'shadowweaver',
     type: 'skill',
     rarity: 'common',
     target: 'self',
     cost: 1,
-    addShivs: 3,
-    upgradedAddShivs: 4,
+    addKnives: 3,
+    upgradedAddKnives: 4,
     description: '将 3 张【飞刀】置入你的手牌。',
     upgradedDescription: '将 4 张【飞刀】置入你的手牌。',
     artKey: 'blades',
   },
-  backflip: {
-    id: 'backflip',
+  nimble_retreat: {
+    id: 'nimble_retreat',
     name: '灵巧后跃',
     pool: 'shadowweaver',
     type: 'skill',
@@ -456,9 +456,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '获得 8 点格挡。抽 2 张牌。',
     artKey: 'flip',
   },
-  acrobatics: {
-    id: 'acrobatics',
-    name: '空中杂技',
+  sleight_of_hand: {
+    id: 'sleight_of_hand',
+    name: '妙手腾挪',
     pool: 'shadowweaver',
     type: 'skill',
     rarity: 'common',
@@ -469,10 +469,10 @@ export const CARD_DEFS: Record<string, CardDef> = {
     discardCount: 1,
     description: '抽 3 张牌。丢弃 1 张手牌。',
     upgradedDescription: '抽 4 张牌。丢弃 1 张手牌。',
-    artKey: 'acro',
+    artKey: 'sleight',
   },
-  dagger_spray: {
-    id: 'dagger_spray',
+  knife_volley: {
+    id: 'knife_volley',
     name: '飞刀齐射',
     pool: 'shadowweaver',
     type: 'attack',
@@ -487,9 +487,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '对所有敌人造成 6 点伤害 2 次。',
     artKey: 'spray',
   },
-  cloak_and_dagger: {
-    id: 'cloak_and_dagger',
-    name: '斗篷暗匕',
+  veil_and_blade: {
+    id: 'veil_and_blade',
+    name: '夜幕藏刃',
     pool: 'shadowweaver',
     type: 'skill',
     rarity: 'common',
@@ -497,14 +497,14 @@ export const CARD_DEFS: Record<string, CardDef> = {
     cost: 1,
     block: 6,
     upgradedBlock: 6,
-    addShivs: 1,
-    upgradedAddShivs: 2,
+    addKnives: 1,
+    upgradedAddKnives: 2,
     description: '获得 6 点格挡。将 1 张【飞刀】置入手牌。',
     upgradedDescription: '获得 6 点格挡。将 2 张【飞刀】置入手牌。',
     artKey: 'cloak_knife',
   },
-  dash: {
-    id: 'dash',
+  gale_rush: {
+    id: 'gale_rush',
     name: '疾风突袭',
     pool: 'shadowweaver',
     type: 'attack',
@@ -517,11 +517,11 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDamage: 13,
     description: '获得 10 点格挡。造成 10 点伤害。',
     upgradedDescription: '获得 13 点格挡。造成 13 点伤害。',
-    artKey: 'dash',
+    artKey: 'rush',
   },
-  blur: {
-    id: 'blur',
-    name: '幽影残像',
+  lingering_shade: {
+    id: 'lingering_shade',
+    name: '幽影徘徊',
     pool: 'shadowweaver',
     type: 'skill',
     rarity: 'uncommon',
@@ -529,14 +529,14 @@ export const CARD_DEFS: Record<string, CardDef> = {
     cost: 1,
     block: 5,
     upgradedBlock: 8,
-    gainBlur: 1,
+    gainShade: 1,
     description: '获得 5 点格挡。下回合开始时格挡不会消失。',
     upgradedDescription: '获得 8 点格挡。下回合开始时格挡不会消失。',
-    artKey: 'blur',
+    artKey: 'shade',
   },
-  catalyst: {
-    id: 'catalyst',
-    name: '剧毒催化',
+  toxic_bloom: {
+    id: 'toxic_bloom',
+    name: '毒性迸发',
     pool: 'shadowweaver',
     type: 'skill',
     rarity: 'uncommon',
@@ -547,10 +547,10 @@ export const CARD_DEFS: Record<string, CardDef> = {
     exhaust: true,
     description: '使目标的中毒层数翻倍。消耗。',
     upgradedDescription: '使目标的中毒层数变为三倍。消耗。',
-    artKey: 'catalyst',
+    artKey: 'bloom',
   },
-  footwork: {
-    id: 'footwork',
+  phantom_steps: {
+    id: 'phantom_steps',
     name: '幻影步法',
     pool: 'shadowweaver',
     type: 'power',
@@ -563,23 +563,23 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '获得 3 点敏捷（所有格挡牌+3）。',
     artKey: 'boots',
   },
-  noxious_fumes: {
-    id: 'noxious_fumes',
-    name: '毒雾弥漫',
+  creeping_miasma: {
+    id: 'creeping_miasma',
+    name: '瘴气蔓延',
     pool: 'shadowweaver',
     type: 'power',
     rarity: 'uncommon',
     target: 'self',
     cost: 1,
-    noxiousFumes: 2,
-    upgradedNoxiousFumes: 3,
+    miasma: 2,
+    upgradedMiasma: 3,
     description: '每回合开始时，给予所有敌人 2 层中毒。',
     upgradedDescription: '每回合开始时，给予所有敌人 3 层中毒。',
-    artKey: 'fumes',
+    artKey: 'miasma',
   },
-  leg_sweep: {
-    id: 'leg_sweep',
-    name: '扫堂重绊',
+  hobbling_kick: {
+    id: 'hobbling_kick',
+    name: '跛足重踢',
     pool: 'shadowweaver',
     type: 'skill',
     rarity: 'uncommon',
@@ -593,9 +593,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '给予 3 层虚弱。获得 14 点格挡。',
     artKey: 'sweep',
   },
-  adrenaline: {
-    id: 'adrenaline',
-    name: '肾上腺素',
+  racing_pulse: {
+    id: 'racing_pulse',
+    name: '心跳如鼓',
     pool: 'shadowweaver',
     type: 'skill',
     rarity: 'rare',
@@ -608,25 +608,25 @@ export const CARD_DEFS: Record<string, CardDef> = {
     exhaust: true,
     description: '获得 1 点能量。抽 2 张牌。消耗。',
     upgradedDescription: '获得 2 点能量。抽 2 张牌。消耗。',
-    artKey: 'adrenaline',
+    artKey: 'pulse',
   },
-  envenom: {
-    id: 'envenom',
-    name: '涂毒秘术',
+  serpents_edge: {
+    id: 'serpents_edge',
+    name: '蛇毒附刃',
     pool: 'shadowweaver',
     type: 'power',
     rarity: 'rare',
     target: 'self',
     cost: 2,
     upgradedCost: 1,
-    envenom: 1,
+    venomEdge: 1,
     description: '每当你造成未被格挡的攻击伤害时，给予目标 1 层中毒。',
     upgradedDescription: '每当你造成未被格挡的攻击伤害时，给予目标 1 层中毒。',
-    artKey: 'envenom',
+    artKey: 'venom_edge',
   },
-  phantasmal_killer: {
-    id: 'phantasmal_killer',
-    name: '幻影绝杀',
+  night_terror: {
+    id: 'night_terror',
+    name: '梦魇杀机',
     pool: 'shadowweaver',
     type: 'skill',
     rarity: 'rare',
@@ -636,11 +636,11 @@ export const CARD_DEFS: Record<string, CardDef> = {
     doubleNextTurn: true,
     description: '下回合你的所有攻击造成双倍伤害。',
     upgradedDescription: '下回合你的所有攻击造成双倍伤害。',
-    artKey: 'phantom',
+    artKey: 'nightmare',
   },
-  corpse_explosion: {
-    id: 'corpse_explosion',
-    name: '尸爆连环',
+  rotburst: {
+    id: 'rotburst',
+    name: '腐尸迸裂',
     pool: 'shadowweaver',
     type: 'skill',
     rarity: 'rare',
@@ -648,15 +648,15 @@ export const CARD_DEFS: Record<string, CardDef> = {
     cost: 2,
     applyPoison: 6,
     upgradedApplyPoison: 9,
-    corpseExplosion: true,
+    rotburst: true,
     description: '给予 6 层中毒。目标死亡时对所有敌人造成等同其最大生命值的伤害。',
     upgradedDescription: '给予 9 层中毒。目标死亡时对所有敌人造成等同其最大生命值的伤害。',
-    artKey: 'corpse',
+    artKey: 'rot',
   },
 
   // === SPECIAL / NEUTRAL / STATUS / CURSE ===
-  shiv: {
-    id: 'shiv',
+  throwing_knife: {
+    id: 'throwing_knife',
     name: '飞刀',
     pool: 'neutral',
     type: 'attack',
@@ -668,10 +668,10 @@ export const CARD_DEFS: Record<string, CardDef> = {
     exhaust: true,
     description: '造成 4 点伤害。消耗。',
     upgradedDescription: '造成 6 点伤害。消耗。',
-    artKey: 'shiv',
+    artKey: 'knife',
   },
-  finesse: {
-    id: 'finesse',
+  deft_poise: {
+    id: 'deft_poise',
     name: '灵巧身姿',
     pool: 'neutral',
     type: 'skill',
@@ -684,10 +684,10 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDraw: 1,
     description: '获得 2 点格挡。抽 1 张牌。',
     upgradedDescription: '获得 4 点格挡。抽 1 张牌。',
-    artKey: 'finesse',
+    artKey: 'poise',
   },
-  flash_of_steel: {
-    id: 'flash_of_steel',
+  cold_glint: {
+    id: 'cold_glint',
     name: '寒光一闪',
     pool: 'neutral',
     type: 'attack',
@@ -702,9 +702,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     upgradedDescription: '造成 6 点伤害。抽 1 张牌。',
     artKey: 'flash',
   },
-  panacea: {
-    id: 'panacea',
-    name: '万灵解药',
+  warding_draught: {
+    id: 'warding_draught',
+    name: '辟邪符水',
     pool: 'neutral',
     type: 'skill',
     rarity: 'uncommon',
@@ -715,22 +715,22 @@ export const CARD_DEFS: Record<string, CardDef> = {
     exhaust: true,
     description: '获得 1 层人工制品（抵消下次负面状态）。消耗。',
     upgradedDescription: '获得 2 层人工制品。消耗。',
-    artKey: 'panacea',
+    artKey: 'ward',
   },
-  apotheosis: {
-    id: 'apotheosis',
-    name: '神化升华',
+  molten_epiphany: {
+    id: 'molten_epiphany',
+    name: '熔心顿悟',
     pool: 'neutral',
     type: 'skill',
     rarity: 'rare',
     target: 'self',
     cost: 2,
     upgradedCost: 1,
-    apotheosis: true,
+    upgradeAllInCombat: true,
     exhaust: true,
     description: '本场战斗中升级你所有的卡牌。消耗。',
     upgradedDescription: '本场战斗中升级你所有的卡牌。消耗。',
-    artKey: 'apotheosis',
+    artKey: 'epiphany',
   },
   burn: {
     id: 'burn',
@@ -755,9 +755,9 @@ export const CARD_DEFS: Record<string, CardDef> = {
     description: '无法打出。占用手牌空间。',
     artKey: 'wound',
   },
-  slimed: {
-    id: 'slimed',
-    name: '酸液粘膜',
+  caustic_residue: {
+    id: 'caustic_residue',
+    name: '腐蚀残渣',
     pool: 'status',
     type: 'status',
     rarity: 'special',
@@ -765,19 +765,19 @@ export const CARD_DEFS: Record<string, CardDef> = {
     cost: 1,
     exhaust: true,
     description: '消耗。清理此状态牌。',
-    artKey: 'slimed',
+    artKey: 'residue',
   },
-  pain: {
-    id: 'pain',
+  marrow_ache: {
+    id: 'marrow_ache',
     name: '蚀骨痛楚',
     pool: 'status',
     type: 'curse',
     rarity: 'special',
     target: 'none',
     cost: -2,
-    painCurse: true,
+    achingCurse: true,
     description: '诅咒 · 无法打出。在手牌中时，每打出一张其他牌失去 1 点生命。',
-    artKey: 'pain',
+    artKey: 'ache',
   },
 };
 
@@ -814,7 +814,7 @@ export function getStarterDeck(heroId: HeroClassId): CardInstance[] {
       createCardInstance('iron_defend'),
       createCardInstance('iron_defend'),
       createCardInstance('iron_defend'),
-      createCardInstance('bash'),
+      createCardInstance('armor_breaker'),
     ];
   }
   return [
@@ -827,8 +827,8 @@ export function getStarterDeck(heroId: HeroClassId): CardInstance[] {
     createCardInstance('shadow_defend'),
     createCardInstance('shadow_defend'),
     createCardInstance('shadow_defend'),
-    createCardInstance('neutralize'),
-    createCardInstance('survivor'),
+    createCardInstance('sapping_cut'),
+    createCardInstance('last_refuge'),
   ];
 }
 

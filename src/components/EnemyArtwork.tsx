@@ -14,24 +14,24 @@ const ENEMY_IMAGE_MAP: Partial<Record<EnemyArtType, { src: string; alt: string; 
     alt: '黑曜守望者',
     border: 'border-amber-500/45',
   },
-  cultist: {
-    src: '/src/assets/images/enemy_cultist_art_1795028067223.jpg',
+  ember_zealot: {
+    src: '/src/assets/images/enemy_ember_zealot_art_1795028067223.jpg',
     alt: '深红狂信徒',
     border: 'border-rose-500/35',
   },
-  nob: {
-    src: '/src/assets/images/enemy_gremlin_nob_art_1795028055930.jpg',
-    alt: '狂怒地精贵族',
+  cinderhorn_brute: {
+    src: '/src/assets/images/enemy_cinderhorn_brute_art_1795028055930.jpg',
+    alt: '烬角蛮兽',
     border: 'border-rose-500/50',
   },
-  slime: {
-    src: '/src/assets/images/enemy_slime_art_1795028136299.jpg',
-    alt: '酸液史莱姆',
+  caustic_ooze: {
+    src: '/src/assets/images/enemy_caustic_ooze_art_1795028136299.jpg',
+    alt: '腐蚀软泥',
     border: 'border-emerald-500/35',
   },
-  jawworm: {
-    src: '/src/assets/images/enemy_jawworm_art_1795028136495.jpg',
-    alt: '深渊颚虫',
+  cinder_burrower: {
+    src: '/src/assets/images/enemy_cinder_burrower_art_1795028136495.jpg',
+    alt: '余烬掘地虫',
     border: 'border-slate-500/45',
   },
   boneknight: {
@@ -39,8 +39,8 @@ const ENEMY_IMAGE_MAP: Partial<Record<EnemyArtType, { src: string; alt: string; 
     alt: '骸骨护卫',
     border: 'border-slate-400/40',
   },
-  lagavulin: {
-    src: '/src/assets/images/enemy_lagavulin_art_1795028144807.jpg',
+  slumbering_gargoyle: {
+    src: '/src/assets/images/enemy_slumbering_gargoyle_art_1795028144807.jpg',
     alt: '沉睡石像鬼',
     border: 'border-violet-500/45',
   },
@@ -117,7 +117,7 @@ export const EnemyArtwork: React.FC<EnemyArtworkProps> = ({
           <radialGradient id={`glow-${artType}`} cx="50%" cy="50%" r="50%">
             <stop
               offset="0%"
-              stopColor={artType === 'sentry' ? '#38bdf8' : '#94a3b8'}
+              stopColor={artType === 'glyph_totem' ? '#38bdf8' : '#94a3b8'}
               stopOpacity="0.25"
             />
             <stop offset="100%" stopColor="#000000" stopOpacity="0" />
@@ -125,7 +125,7 @@ export const EnemyArtwork: React.FC<EnemyArtworkProps> = ({
         </defs>
         <circle cx="80" cy="84" r="64" fill={`url(#glow-${artType})`} />
 
-        {artType === 'looter' && (
+        {artType === 'ash_marauder' && (
           <g>
             <path d="M44 142 L56 66 Q80 48 104 66 L116 142 Z" fill="#1e293b" stroke="#64748b" strokeWidth="2" />
             <circle cx="80" cy="54" r="19" fill="#0f172a" stroke="#94a3b8" strokeWidth="2" />
@@ -137,7 +137,7 @@ export const EnemyArtwork: React.FC<EnemyArtworkProps> = ({
           </g>
         )}
 
-        {artType === 'sentry' && (
+        {artType === 'glyph_totem' && (
           <g>
             <polygon
               points="80,24 124,62 108,132 52,132 36,62"
@@ -151,7 +151,7 @@ export const EnemyArtwork: React.FC<EnemyArtworkProps> = ({
           </g>
         )}
 
-        {artType !== 'looter' && artType !== 'sentry' && (
+        {artType !== 'ash_marauder' && artType !== 'glyph_totem' && (
           <g>
             <rect x="40" y="34" width="80" height="104" rx="14" fill="#1e293b" stroke="#f59e0b" strokeWidth="3" />
             <circle cx="80" cy="86" r="18" fill="#f59e0b" opacity="0.85" />

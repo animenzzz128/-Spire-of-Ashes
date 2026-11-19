@@ -41,7 +41,7 @@ const CARD_ART_MAP: Record<string, string> = {
   iron_bulwark: '/src/assets/images/card_art_iron_bulwark_1795034563806.jpg',
   blood_fury: '/src/assets/images/card_art_blood_fury_1795034563391.jpg',
   venom_strike: '/src/assets/images/card_art_venom_strike_1795034563360.jpg',
-  shadow_shiv: '/src/assets/images/card_art_shadow_shiv_1795034565706.jpg',
+  shadow_knife: '/src/assets/images/card_art_shadow_knife_1795034565706.jpg',
   curse_burn: '/src/assets/images/card_art_curse_burn_1795034566156.jpg',
 };
 
@@ -51,36 +51,36 @@ function getCardArtSrc(artKey: string, type: string): string {
     type === 'curse' ||
     artKey === 'burn' ||
     artKey === 'wound' ||
-    artKey === 'slimed' ||
-    artKey === 'pain'
+    artKey === 'residue' ||
+    artKey === 'ache'
   ) {
     return CARD_ART_MAP.curse_burn;
   }
   if (
     artKey === 'poison_blade' ||
     artKey === 'vial' ||
-    artKey === 'catalyst' ||
-    artKey === 'fumes' ||
-    artKey === 'envenom' ||
-    artKey === 'corpse'
+    artKey === 'bloom' ||
+    artKey === 'miasma' ||
+    artKey === 'venom_edge' ||
+    artKey === 'rot'
   ) {
     return CARD_ART_MAP.venom_strike;
   }
   if (
     artKey === 'dagger' ||
-    artKey === 'neutralize' ||
+    artKey === 'sap' ||
     artKey === 'blades' ||
     artKey === 'flip' ||
-    artKey === 'acro' ||
+    artKey === 'sleight' ||
     artKey === 'spray' ||
     artKey === 'cloak_knife' ||
-    artKey === 'dash' ||
-    artKey === 'shiv' ||
+    artKey === 'rush' ||
+    artKey === 'knife' ||
     artKey === 'flash' ||
-    artKey === 'phantom' ||
+    artKey === 'nightmare' ||
     artKey === 'sweep'
   ) {
-    return CARD_ART_MAP.shadow_shiv;
+    return CARD_ART_MAP.shadow_knife;
   }
   if (
     artKey === 'shield' ||
@@ -91,11 +91,11 @@ function getCardArtSrc(artKey: string, type: string): string {
     artKey === 'fortress' ||
     artKey === 'bastion' ||
     artKey === 'cloak' ||
-    artKey === 'survivor' ||
-    artKey === 'blur' ||
+    artKey === 'refuge' ||
+    artKey === 'shade' ||
     artKey === 'boots' ||
-    artKey === 'finesse' ||
-    artKey === 'panacea'
+    artKey === 'poise' ||
+    artKey === 'ward'
   ) {
     return CARD_ART_MAP.iron_bulwark;
   }
@@ -103,10 +103,10 @@ function getCardArtSrc(artKey: string, type: string): string {
     artKey === 'flame' ||
     artKey === 'blood' ||
     artKey === 'focus' ||
-    artKey === 'ritual' ||
-    artKey === 'demon' ||
-    artKey === 'adrenaline' ||
-    artKey === 'apotheosis'
+    artKey === 'covenant' ||
+    artKey === 'infernal' ||
+    artKey === 'pulse' ||
+    artKey === 'epiphany'
   ) {
     return CARD_ART_MAP.blood_fury;
   }
@@ -122,9 +122,9 @@ function renderFallbackArtIcon(artKey: string, type: string) {
   if (
     artKey.includes('poison') ||
     artKey === 'vial' ||
-    artKey === 'catalyst' ||
-    artKey === 'fumes' ||
-    artKey === 'corpse'
+    artKey === 'bloom' ||
+    artKey === 'miasma' ||
+    artKey === 'rot'
   ) {
     return <Droplet className={`${cls} text-emerald-400`} />;
   }
@@ -137,10 +137,10 @@ function renderFallbackArtIcon(artKey: string, type: string) {
   ) {
     return <Shield className={`${cls} text-sky-400`} />;
   }
-  if (artKey === 'demon' || artKey === 'flame' || artKey === 'ritual' || artKey === 'apotheosis') {
+  if (artKey === 'infernal' || artKey === 'flame' || artKey === 'covenant' || artKey === 'epiphany') {
     return <Flame className={`${cls} text-amber-400`} />;
   }
-  if (artKey === 'shiv' || artKey === 'blades' || artKey === 'spray') {
+  if (artKey === 'knife' || artKey === 'blades' || artKey === 'spray') {
     return <Crosshair className={`${cls} text-teal-300`} />;
   }
   if (type === 'power') return <Sparkles className={`${cls} text-amber-300`} />;

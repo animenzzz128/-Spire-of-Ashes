@@ -77,7 +77,7 @@ function cardValue(s: RunState, card: CardInstance, target: EnemyInstance): numb
   for (const t of targets) {
     if (poison) v += Math.min(t.hp, poison * 2.2);
     if (def.doublePoison) v += Math.min(t.hp, t.statuses.poison * (g(def.doublePoison, def.upgradedDoublePoison) - 1) * 1.8);
-    if (def.corpseExplosion && living(s).length > 1) v += 15;
+    if (def.rotburst && living(s).length > 1) v += 15;
     const vul = g(def.applyVulnerable, def.upgradedApplyVulnerable);
     if (vul && t.statuses.artifact === 0) v += 3 * vul;
     const wk = g(def.applyWeak, def.upgradedApplyWeak);
@@ -89,12 +89,12 @@ function cardValue(s: RunState, card: CardInstance, target: EnemyInstance): numb
   const draw = g(def.draw, def.upgradedDraw);
   if (draw && !c.playerStatuses.noDrawThisTurn) v += Math.min(draw, c.drawPile.length + c.discardPile.length) * 3;
   v += g(def.gainEnergy, def.upgradedGainEnergy) * 5;
-  if (def.addShivs) v += g(def.addShivs, def.upgradedAddShivs) * 3.5;
+  if (def.addKnives) v += g(def.addKnives, def.upgradedAddKnives) * 3.5;
   if (def.doubleNextTurn) v += 4;
   if (def.gainArtifact) v += 1;
   if (def.loseHp) v -= def.loseHp * (s.hp < 20 ? 3 : 0.6);
-  if (def.apotheosis) v += 12;
-  if (card.defId === 'slimed') v = 0.5;
+  if (def.upgradeAllInCombat) v += 12;
+  if (card.defId === 'caustic_residue') v = 0.5;
   return v;
 }
 
@@ -113,7 +113,7 @@ function choosePlay(s: RunState, skip: Set<string>): { uid: string; target?: str
   for (const h of playable) {
     const d = CARD_DEFS[h.defId];
     if (d.type === 'power') {
-      if (d.barricade && c.playerStatuses.barricade) continue;
+      if (d.bastion && c.playerStatuses.bastion) continue;
       // Don't sink 2+ energy into a power while about to take a big hit.
       if (getCardCost(h) >= 2 && incoming(s) - c.playerBlock > 0.25 * s.hp) continue;
       return { uid: h.uid };
@@ -121,7 +121,7 @@ function choosePlay(s: RunState, skip: Set<string>): { uid: string; target?: str
   }
   for (const h of playable) {
     const d = CARD_DEFS[h.defId];
-    if (d.apotheosis) return { uid: h.uid };
+    if (d.upgradeAllInCombat) return { uid: h.uid };
     if (getCardCost(h) === 0 && d.type === 'skill' && (d.gainEnergy || d.draw)) {
       if (d.loseHp && s.hp - d.loseHp < 15) continue;
       if (d.draw && !d.gainEnergy && c.playerStatuses.noDrawThisTurn) continue;
@@ -193,9 +193,9 @@ function startTurnPotions(s: RunState): RunState {
     const p = s.potions[i];
     if (!p) continue;
     const c = s.combat!;
-    if (p.id === 'heal_potion' && s.hp < 0.3 * s.maxHp) { s = usePot(s, i); continue; }
+    if (p.id === 'heartblood_elixir' && s.hp < 0.3 * s.maxHp) { s = usePot(s, i); continue; }
     if (c.turn === 1 && (c.isBossFight || c.isEliteFight) &&
-      ['fire_potion', 'poison_potion', 'strength_potion', 'energy_potion', 'swift_potion'].includes(p.id)) {
+      ['wildfire_flask', 'nightshade_vial', 'berserker_draught', 'kindling_elixir', 'haste_tincture'].includes(p.id)) {
       s = usePot(s, i);
     }
   }
@@ -209,9 +209,9 @@ function endTurnPotions(s: RunState): RunState {
     if (!p) continue;
     const c = s.combat!;
     const after = s.hp - Math.max(0, incoming(s) - c.playerBlock);
-    if (p.id === 'block_potion' && after < 0.25 * s.maxHp) s = usePot(s, i);
-    else if (p.id === 'heal_potion' && (s.hp < 0.3 * s.maxHp || after <= 0)) s = usePot(s, i);
-    else if (after <= 0 && p.id === 'fire_potion') s = usePot(s, i); // desperation
+    if (p.id === 'stoneskin_tonic' && after < 0.25 * s.maxHp) s = usePot(s, i);
+    else if (p.id === 'heartblood_elixir' && (s.hp < 0.3 * s.maxHp || after <= 0)) s = usePot(s, i);
+    else if (after <= 0 && p.id === 'wildfire_flask') s = usePot(s, i); // desperation
   }
   return s;
 }
@@ -297,7 +297,7 @@ function handleRest(s: RunState): RunState {
   }
   const order = [
     (c: CardInstance) => CARD_DEFS[c.defId].rarity !== 'starter',
-    (c: CardInstance) => c.defId === 'bash' || c.defId === 'neutralize' || c.defId === 'survivor',
+    (c: CardInstance) => c.defId === 'armor_breaker' || c.defId === 'sapping_cut' || c.defId === 'last_refuge',
     (c: CardInstance) => c.defId.endsWith('_strike'),
     (c: CardInstance) => true,
   ];
@@ -327,7 +327,7 @@ function handleEvent(s: RunState): RunState {
   const enabled = (id: string) => ev.options.some((o) => o.id === id && !o.disabled);
   let choice: string;
   switch (ev.id) {
-    case 'golden_idol': choice = s.hp - 10 > 0.4 * s.maxHp ? 'take_gold' : 'leave'; break;
+    case 'ember_shrine': choice = s.hp - 10 > 0.4 * s.maxHp ? 'take_gold' : 'leave'; break;
     case 'wandering_smith': choice = enabled('buy_relic') ? 'buy_relic' : 'remove_weak'; break;
     case 'whispering_fountain': choice = s.hp < 0.5 * s.maxHp ? 'drink_deep' : 'wash_blades'; break;
     case 'abyssal_altar': choice = s.hp - 12 > 0.45 * s.maxHp ? 'claim_relic' : 'walk_away'; break;

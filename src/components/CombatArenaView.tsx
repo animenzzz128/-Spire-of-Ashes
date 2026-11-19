@@ -140,24 +140,24 @@ function renderStatusTags(statuses: StatusMap, locale: Locale) {
         : `Loses ${statuses.poison} HP at turn start (ignores Block)`,
     });
   }
-  if (statuses.metallicize > 0) {
+  if (statuses.ironhide > 0) {
     items.push({
-      label: zh ? '金属化' : 'Metallicize',
-      value: statuses.metallicize,
+      label: zh ? '铁肤' : 'Ironhide',
+      value: statuses.ironhide,
       tone: 'text-slate-200 border-slate-400/40 bg-slate-800/70',
       title: zh
-        ? `每回合获得 ${statuses.metallicize} 点格挡`
-        : `Gains ${statuses.metallicize} Block every turn`,
+        ? `每回合获得 ${statuses.ironhide} 点格挡`
+        : `Gains ${statuses.ironhide} Block every turn`,
     });
   }
-  if (statuses.ritual > 0) {
+  if (statuses.zeal > 0) {
     items.push({
-      label: zh ? '仪式' : 'Ritual',
-      value: statuses.ritual,
+      label: zh ? '狂热' : 'Zeal',
+      value: statuses.zeal,
       tone: 'text-rose-300 border-rose-400/40 bg-rose-950/60',
       title: zh
-        ? `每回合结束获得 ${statuses.ritual} 点力量`
-        : `Gains ${statuses.ritual} Strength each turn`,
+        ? `每回合结束获得 ${statuses.zeal} 点力量`
+        : `Gains ${statuses.zeal} Strength each turn`,
     });
   }
   if (statuses.thorns > 0) {
@@ -180,53 +180,53 @@ function renderStatusTags(statuses: StatusMap, locale: Locale) {
         : `Negates next ${statuses.artifact} debuff(s)`,
     });
   }
-  if (statuses.barricade) {
+  if (statuses.bastion) {
     items.push({
-      label: zh ? '壁垒' : 'Barricade',
+      label: zh ? '堡垒' : 'Bastion',
       value: '∞',
       tone: 'text-sky-200 border-sky-400/50 bg-sky-950/70',
       title: zh ? '格挡不再在回合开始时消失' : 'Block is no longer lost between turns',
     });
   }
-  if (statuses.blur > 0) {
+  if (statuses.shade > 0) {
     items.push({
-      label: zh ? '残像' : 'Blur',
-      value: statuses.blur,
+      label: zh ? '幽影' : 'Shade',
+      value: statuses.shade,
       tone: 'text-teal-200 border-teal-400/40 bg-teal-950/60',
       title: zh ? '下回合开始时保留当前格挡' : 'Block is retained next turn',
     });
   }
-  if (statuses.demonForm > 0) {
+  if (statuses.infernalAvatar > 0) {
     items.push({
-      label: zh ? '魔化' : 'Demon Form',
-      value: `+${statuses.demonForm}`,
+      label: zh ? '炼狱' : 'Infernal',
+      value: `+${statuses.infernalAvatar}`,
       tone: 'text-red-300 border-red-500/40 bg-red-950/60',
       title: zh
-        ? `每回合开始获得 ${statuses.demonForm} 点力量`
-        : `Gain ${statuses.demonForm} Strength each turn`,
+        ? `每回合开始获得 ${statuses.infernalAvatar} 点力量`
+        : `Gain ${statuses.infernalAvatar} Strength each turn`,
     });
   }
-  if (statuses.noxiousFumes > 0) {
+  if (statuses.miasma > 0) {
     items.push({
-      label: zh ? '毒雾' : 'Fumes',
-      value: statuses.noxiousFumes,
+      label: zh ? '瘴气' : 'Miasma',
+      value: statuses.miasma,
       tone: 'text-emerald-300 border-emerald-500/40 bg-emerald-950/60',
       title: zh
-        ? `每回合开始给予所有敌人 ${statuses.noxiousFumes} 层中毒`
-        : `Apply ${statuses.noxiousFumes} Poison to all enemies each turn`,
+        ? `每回合开始给予所有敌人 ${statuses.miasma} 层中毒`
+        : `Apply ${statuses.miasma} Poison to all enemies each turn`,
     });
   }
-  if (statuses.envenom > 0) {
+  if (statuses.venomEdge > 0) {
     items.push({
-      label: zh ? '涂毒' : 'Envenom',
-      value: statuses.envenom,
+      label: zh ? '蛇毒' : 'Venom Edge',
+      value: statuses.venomEdge,
       tone: 'text-lime-300 border-lime-500/40 bg-lime-950/60',
       title: zh ? '未格挡的攻击伤害附加中毒' : 'Unblocked attack hits apply Poison',
     });
   }
-  if (statuses.corpseExplosion) {
+  if (statuses.rotburst) {
     items.push({
-      label: zh ? '尸爆' : 'Corpse Exp.',
+      label: zh ? '腐爆' : 'Rotburst',
       value: '!',
       tone: 'text-emerald-200 border-emerald-400/50 bg-emerald-950/70',
       title: zh

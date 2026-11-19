@@ -1,57 +1,57 @@
 import { PotionDef } from './types';
 
 export const POTION_DEFS: Record<string, PotionDef> = {
-  fire_potion: {
-    id: 'fire_potion',
-    name: '烈焰药水',
+  wildfire_flask: {
+    id: 'wildfire_flask',
+    name: '野火烧瓶',
     rarity: 'common',
     target: 'enemy',
     description: '对目标敌人造成 20 点伤害。',
     color: '#ef4444',
   },
-  block_potion: {
-    id: 'block_potion',
-    name: '铁壁药水',
+  stoneskin_tonic: {
+    id: 'stoneskin_tonic',
+    name: '石肤药剂',
     rarity: 'common',
     target: 'self',
     description: '获得 12 点格挡。',
     color: '#3b82f6',
   },
-  strength_potion: {
-    id: 'strength_potion',
-    name: '力量药水',
+  berserker_draught: {
+    id: 'berserker_draught',
+    name: '狂战药剂',
     rarity: 'common',
     target: 'self',
     description: '本场战斗获得 2 点力量。',
     color: '#f97316',
   },
-  poison_potion: {
-    id: 'poison_potion',
-    name: '剧毒药水',
+  nightshade_vial: {
+    id: 'nightshade_vial',
+    name: '颠茄毒瓶',
     rarity: 'common',
     target: 'enemy',
     description: '给予目标敌人 6 层中毒。',
     color: '#10b981',
   },
-  energy_potion: {
-    id: 'energy_potion',
-    name: '充能药水',
+  kindling_elixir: {
+    id: 'kindling_elixir',
+    name: '引火灵药',
     rarity: 'common',
     target: 'self',
     description: '本回合获得 2 点能量。',
     color: '#eab308',
   },
-  swift_potion: {
-    id: 'swift_potion',
-    name: '疾风药水',
+  haste_tincture: {
+    id: 'haste_tincture',
+    name: '迅捷酊剂',
     rarity: 'common',
     target: 'self',
     description: '立即抽 3 张牌。',
     color: '#06b6d4',
   },
-  heal_potion: {
-    id: 'heal_potion',
-    name: '血精药水',
+  heartblood_elixir: {
+    id: 'heartblood_elixir',
+    name: '心血灵药',
     rarity: 'rare',
     target: 'self',
     description: '立即回复 15 点生命值。',
