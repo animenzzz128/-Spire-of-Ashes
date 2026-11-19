@@ -567,7 +567,7 @@ export function tCombatMsg(msg: CombatMsg, locale: Locale): string {
     case 'fleetRibbon':
       return zh ? `疾风缎带: 敏捷+${n}` : `Fleet Ribbon: Dexterity +${n}`;
     case 'cinderglassWard':
-      return zh ? `+${n} 烬琉璃格挡` : `+${n} Cinderglass Block`;
+      return zh ? `+${n} 熔琉璃格挡` : `+${n} Cinderglass Block`;
     case 'watchmanHorn':
       return zh ? `+${n} 号角格挡` : `+${n} Watchman's Horn Block`;
     case 'nightTerror':

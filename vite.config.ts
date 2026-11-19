@@ -6,8 +6,8 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    // Site root by default. The GitHub Pages workflow builds with
-    // BASE_PATH=/spire-of-ashes/ so the game works under the project sub-path.
+    // Site root by default. The GitHub Pages workflow sets BASE_PATH to
+    // /<repository name>/ so the game works under the project sub-path.
     base: process.env.BASE_PATH || '/',
     plugins: [
       react(),

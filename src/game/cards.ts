@@ -321,7 +321,7 @@ export const CARD_DEFS: Record<string, CardDef> = {
   },
   soul_harvest: {
     id: 'soul_harvest',
-    name: '灵魂收割',
+    name: '摄魂镰舞',
     pool: 'ironwarden',
     type: 'attack',
     rarity: 'rare',
@@ -672,7 +672,7 @@ export const CARD_DEFS: Record<string, CardDef> = {
   },
   deft_poise: {
     id: 'deft_poise',
-    name: '灵巧身姿',
+    name: '轻灵身姿',
     pool: 'neutral',
     type: 'skill',
     rarity: 'uncommon',

@@ -52,7 +52,7 @@ export const RELIC_DEFS: Record<string, RelicDef> = {
   },
   cinderglass_ward: {
     id: 'cinderglass_ward',
-    name: '烬琉璃护符',
+    name: '熔琉璃护符',
     rarity: 'common',
     description: '回合结束时若你没有任何格挡，则获得 6 点格挡。',
     iconKey: 'glass',
