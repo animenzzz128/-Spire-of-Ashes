@@ -36,6 +36,8 @@ interface CardViewProps {
   stokeMode?: boolean; // hand card can be burned for Ember
   shortcutNumber?: number;
   compact?: boolean;
+  /** Phone hand size: cost, name and art only (the tap preview shows the full card). */
+  mini?: boolean;
   draggableCard?: boolean;
   onClick?: () => void;
   onMouseEnter?: () => void;
@@ -168,6 +170,7 @@ export const CardView: React.FC<CardViewProps> = ({
   stokeMode = false,
   shortcutNumber,
   compact = false,
+  mini = false,
   draggableCard = false,
   onClick,
   onMouseEnter,
@@ -329,7 +332,7 @@ export const CardView: React.FC<CardViewProps> = ({
       disabled={isDisabled && !discardMode && onClick === undefined}
       aria-label={`${localized.name}${card.upgraded ? '+' : ''} Cost ${costDisplay}`}
       className={`group relative flex flex-col justify-between text-left rounded-xl border bg-[#161b26] transition-all duration-150 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
-        compact ? 'w-36 h-52 p-2.5' : 'w-40 sm:w-44 h-60 sm:h-64 p-2.5'
+        mini ? 'w-28 h-40 p-1.5' : compact ? 'w-36 h-52 p-2.5' : 'w-40 sm:w-44 h-60 sm:h-64 p-2.5'
       } ${borderTone} ${
         isDisabled && !discardMode && !stokeMode
           ? 'opacity-55 cursor-not-allowed'
@@ -338,7 +341,9 @@ export const CardView: React.FC<CardViewProps> = ({
     >
       {/* Energy Gem */}
       <div
-        className={`absolute -top-2.5 -left-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-lg border font-mono-num text-sm font-bold shadow-md ${
+        className={`absolute -top-2.5 -left-2.5 z-10 flex items-center justify-center rounded-lg border font-mono-num font-bold shadow-md ${
+          mini ? 'h-7 w-7 text-xs' : 'h-8 w-8 text-sm'
+        } ${
           isUnplayable
             ? 'border-slate-600 bg-slate-800 text-slate-400'
             : canAfford
@@ -350,7 +355,7 @@ export const CardView: React.FC<CardViewProps> = ({
       </div>
 
       {/* Keyboard shortcut hint */}
-      {shortcutNumber !== undefined && (
+      {shortcutNumber !== undefined && !mini && (
         <span className="absolute -top-2 right-2 z-10 bg-[#0b0e14] px-1.5 py-0.5 text-[10px] font-mono-num text-slate-400 border border-white/10 rounded">
           {shortcutNumber}
         </span>
@@ -359,7 +364,7 @@ export const CardView: React.FC<CardViewProps> = ({
       {/* Card Header */}
       <div className="pt-0.5 pl-4">
         <div
-          className={`truncate text-sm font-bold tracking-tight ${
+          className={`truncate font-bold tracking-tight ${mini ? 'text-xs' : 'text-sm'} ${
             card.upgraded ? 'text-emerald-400' : 'text-slate-100'
           }`}
         >
@@ -399,7 +404,7 @@ export const CardView: React.FC<CardViewProps> = ({
       </div>
 
       {/* Rules Text */}
-      <div className="min-h-[3.2rem] flex items-center justify-center rounded-md bg-[#0f131b] px-2 py-1 border border-white/5">
+      <div className={`${mini ? 'hidden' : 'flex'} min-h-[3.2rem] items-center justify-center rounded-md bg-[#0f131b] px-2 py-1 border border-white/5`}>
         <p className="text-[11px] leading-snug text-slate-200 text-center">
           {renderStyledDescription()}
         </p>

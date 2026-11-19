@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Archive,
   Flame,
   Hammer,
   Heart,
@@ -46,6 +47,7 @@ import {
 import { CardView } from './CardView';
 import { EnemyArtwork } from './EnemyArtwork';
 import { PileModal } from './PileModal';
+import { InfoTip, useIsTouch, useMediaQuery } from './InfoTip';
 import { isDialogOpen } from './useDialog';
 import { assetUrl } from '../game/assets';
 
@@ -415,6 +417,11 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
   const [pointerOffset, setPointerOffset] = useState({ x: 0, y: 0 });
   // Stoke mode: the next hand card clicked is burned for Ember instead of played.
   const [stokeMode, setStokeMode] = useState(false);
+  // Phones (< 768px) get the portrait layout; touch screens preview a card on
+  // the first tap and play it on the second (there is no hover to read it).
+  const isTouch = useIsTouch();
+  const isPhone = useMediaQuery('(max-width: 767px)');
+  const [previewCardUid, setPreviewCardUid] = useState<string | null>(null);
   // Enemy elements, for keyboard targeting (arrow keys move between them).
   const enemyRefs = useRef(new Map<string, HTMLDivElement>());
 
@@ -454,6 +461,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
   useEffect(() => {
     setSelectedCardUid(null);
     setStokeMode(false);
+    setPreviewCardUid(null);
   }, [combat?.turn, combat?.hand.length]);
 
   // Entering targeting mode (a targeted card or potion with 2+ living enemies)
@@ -561,7 +569,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
 
   // Single-row hand: cards overlap just enough to fit the measured row width.
   // CardView is w-40 (160px) below the sm breakpoint and w-44 (176px) from sm up.
-  const handCardWidth = viewportWidth >= 640 ? 176 : 160;
+  const handCardWidth = isPhone ? 112 : viewportWidth >= 640 ? 176 : 160;
   const handGap = 12;
   const handCount = combat.hand.length;
   const handStep =
@@ -580,6 +588,11 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
       onDiscardCard(card.uid);
       return;
     }
+    if (isTouch && previewCardUid !== card.uid) {
+      setPreviewCardUid(card.uid);
+      return;
+    }
+    setPreviewCardUid(null);
     const def = CARD_DEFS[card.defId];
     if (!def) return;
     const cost = getCardCost(card);
@@ -790,7 +803,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
     <div
       onMouseMove={handleArenaPointerMove}
       onMouseLeave={() => setPointerOffset({ x: 0, y: 0 })}
-      className="relative flex min-h-[calc(100vh-58px)] flex-col justify-between overflow-hidden"
+      className="relative flex min-h-[calc(100dvh-58px)] flex-col justify-between overflow-clip"
     >
       {/* Dynamic Multi-Biome Arena Backdrop with Parallax Depth & Impact Displacement */}
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
@@ -832,21 +845,21 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
       </div>
 
       {/* Top Combat Status Strip */}
-      <div className="relative z-10 mx-auto flex w-full max-w-[1440px] items-center justify-between px-4 pt-4 sm:px-8">
-        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
+      <div className="relative z-10 mx-auto flex w-full max-w-[1440px] items-center justify-between gap-2 px-3 pt-3 sm:px-8 sm:pt-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-300">
           <span className="font-mono-num font-semibold text-amber-300">
             {locale === 'zh' ? `第 ${combat.turn} 回合` : `Turn ${combat.turn}`}
           </span>
-          <span className="text-slate-500">·</span>
-          <span>
+          <span className="hidden text-slate-500 sm:inline">·</span>
+          <span className="hidden sm:inline">
             {combat.isBossFight
               ? copy.bossFight
               : combat.isEliteFight
               ? copy.eliteFight
               : copy.normalFight}
           </span>
-          <span className="text-slate-500">·</span>
-          <span className="text-slate-400">{sceneTheme.biome}</span>
+          <span className="hidden text-slate-500 sm:inline">·</span>
+          <span className="hidden text-slate-400 sm:inline">{sceneTheme.biome}</span>
           {combat.doubleDamageActive && (
             <>
               <span className="text-slate-500">·</span>
@@ -857,19 +870,52 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowLog((v) => !v)}
-          className="flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#141923]/90 px-3 py-1.5 text-xs text-slate-300 hover:text-white cursor-pointer"
-        >
-          <ScrollText className="h-3.5 w-3.5 text-slate-400" />
-          <span>{copy.combatLog}</span>
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* Phones: piles live here so the bottom bar fits one row. */}
+          <button
+            type="button"
+            onClick={() => setInspectPile('draw')}
+            aria-label={`${copy.drawPile} ${combat.drawPile.length}`}
+            className="flex items-center gap-1 rounded-lg border border-white/12 bg-[#141923]/90 px-2 py-1.5 text-xs text-slate-200 md:hidden cursor-pointer"
+          >
+            <Layers className="h-3.5 w-3.5 text-sky-400" />
+            <span className="font-mono-num font-bold">{combat.drawPile.length}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setInspectPile('discard')}
+            aria-label={`${copy.discardPile} ${combat.discardPile.length}`}
+            className="flex items-center gap-1 rounded-lg border border-white/12 bg-[#141923]/90 px-2 py-1.5 text-xs text-slate-200 md:hidden cursor-pointer"
+          >
+            <Archive className="h-3.5 w-3.5 text-amber-300" />
+            <span className="font-mono-num font-bold">{combat.discardPile.length}</span>
+          </button>
+          {combat.exhaustPile.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setInspectPile('exhaust')}
+              aria-label={`${copy.exhaustPile} ${combat.exhaustPile.length}`}
+              className="flex items-center gap-1 rounded-lg border border-white/12 bg-[#141923]/90 px-2 py-1.5 text-xs text-slate-200 md:hidden cursor-pointer"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+              <span className="font-mono-num font-bold">{combat.exhaustPile.length}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowLog((v) => !v)}
+            aria-label={copy.combatLog}
+            className="flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#141923]/90 px-2 py-1.5 text-xs text-slate-300 hover:text-white sm:px-3 cursor-pointer"
+          >
+            <ScrollText className="h-3.5 w-3.5 text-slate-400" />
+            <span className="sr-only sm:not-sr-only">{copy.combatLog}</span>
+          </button>
+        </div>
       </div>
 
       {/* Prompt Banners for Targeting / Discarding */}
       {(isTargetingEnemy || combat.pendingDiscard || stokeMode) && (
-        <div className="relative z-20 mx-auto mt-2 flex items-center gap-3 rounded-lg border border-amber-400/50 bg-[#171d29]/95 px-4 py-2 text-sm text-amber-200 shadow-lg">
+        <div className="relative z-20 mx-3 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-400/50 bg-[#171d29]/95 px-4 py-2 text-xs text-amber-200 shadow-lg sm:mx-auto sm:text-sm">
           {stokeMode ? (
             <>
               <Flame className="h-4 w-4 text-orange-400" />
@@ -925,13 +971,14 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
           e.preventDefault();
           handleDropCard();
         }}
-        className={`relative z-10 mx-auto flex w-full max-w-[1320px] flex-1 flex-col md:flex-row items-center md:items-end justify-between gap-10 px-6 pb-8 pt-6 ${
+        onClick={() => setPreviewCardUid(null)}
+        className={`relative z-10 mx-auto flex w-full max-w-[1320px] flex-1 flex-col md:flex-row items-center md:items-end justify-start md:justify-between gap-3 px-3 pb-4 pt-3 md:gap-10 md:px-6 md:pb-8 md:pt-6 ${
           arenaShake ? 'animate-arena-shake' : ''
         }`}
         style={!arenaShake ? { transform: stageParallaxTransform, transition: 'transform 220ms ease-out' } : undefined}
       >
         {/* Left Side: Hero Standee Standoff Position */}
-        <div className="relative flex flex-col items-center md:ml-8 md:translate-y-2">
+        <div className="relative order-2 flex flex-row items-center gap-3 md:order-none md:ml-8 md:translate-y-2 md:flex-col md:gap-0">
           <div className="relative flex items-center justify-center">
             {/* Floating Combat Numbers for Player */}
             <div className="pointer-events-none absolute -top-10 left-1/2 z-40 -translate-x-1/2 flex flex-col items-center gap-1">
@@ -958,9 +1005,9 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
             </div>
 
             {/* Grounded Shadow & Stance Disc */}
-            <div className="pointer-events-none absolute -bottom-2 left-1/2 h-8 w-44 -translate-x-1/2 rounded-full bg-black/75 blur-md" />
+            <div className="pointer-events-none absolute -bottom-2 left-1/2 h-6 w-20 -translate-x-1/2 rounded-full bg-black/75 blur-md md:h-8 md:w-44" />
             <div
-              className="pointer-events-none absolute -bottom-1 left-1/2 h-4 w-36 -translate-x-1/2 rounded-full opacity-55"
+              className="pointer-events-none absolute -bottom-1 left-1/2 h-3 w-16 -translate-x-1/2 rounded-full opacity-55 md:h-4 md:w-36"
               style={{
                 border: `1.5px solid ${hero.accentColor}`,
                 boxShadow: `0 0 18px ${hero.accentColor}55`,
@@ -969,7 +1016,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
 
             {/* Borderless Feathered Hero Standee Figure */}
             <div
-              className={`relative h-64 w-48 sm:h-80 sm:w-56 transition-transform ${
+              className={`relative h-28 w-20 md:h-80 md:w-56 transition-transform ${
                 hitPlayer
                   ? 'animate-hit-shake brightness-125'
                   : heroAttacking
@@ -1017,7 +1064,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
 
             {/* Active Block Shield Badge */}
             {combat.playerBlock > 0 && (
-              <div className="absolute right-0 bottom-3 z-20 flex items-center gap-1 rounded-lg border border-sky-400/75 bg-sky-950/95 px-2.5 py-1 text-sm font-bold text-sky-200 shadow-lg">
+              <div className="absolute -right-2 bottom-0 z-20 flex items-center gap-1 rounded-lg border border-sky-400/75 bg-sky-950/95 px-1.5 py-0.5 text-xs font-bold text-sky-200 shadow-lg md:right-0 md:bottom-3 md:px-2.5 md:py-1 md:text-sm">
                 <Shield className="h-4 w-4 text-sky-400" />
                 <span className="font-mono-num">{combat.playerBlock}</span>
               </div>
@@ -1025,7 +1072,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
           </div>
 
           {/* Player HP Bar & Statuses */}
-          <div className="mt-3 w-56 sm:w-64 rounded-xl bg-[#0b0e14]/70 px-3 py-2 backdrop-blur-sm border border-white/8">
+          <div className="w-52 rounded-xl bg-[#0b0e14]/70 px-3 py-2 backdrop-blur-sm border border-white/8 md:mt-3 md:w-64">
             <div className="mb-1 flex items-center justify-between text-xs">
               <span className="font-semibold text-slate-100">{heroName}</span>
               <span className="flex items-center gap-1 font-mono-num text-rose-200">
@@ -1033,6 +1080,22 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                 {state.hp} / {state.maxHp}
               </span>
             </div>
+            {totalIncomingDamage > 0 && (
+              <div
+                className={`mb-1 font-mono-num text-[11px] md:hidden ${
+                  netIncomingDamage >= state.hp
+                    ? 'font-bold text-rose-300'
+                    : netIncomingDamage > 0
+                    ? 'text-rose-300'
+                    : 'text-emerald-300'
+                }`}
+              >
+                {netIncomingDamage >= state.hp ? '☠ ' : ''}
+                {netIncomingDamage > 0
+                  ? `${copy.incomingTotal} ${totalIncomingDamage} · ${copy.netHpLoss} ${netIncomingDamage}`
+                  : `${copy.incomingTotal} ${totalIncomingDamage} · ${copy.fullyBlocked}`}
+              </div>
+            )}
             <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800/90 border border-white/10">
               <div
                 className="h-full bg-gradient-to-r from-rose-600 to-rose-400 transition-all duration-300"
@@ -1043,13 +1106,14 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
             {renderStatusTags(combat.playerStatuses, locale).length > 0 && (
               <div className="mt-2 flex flex-wrap justify-center gap-1.5">
                 {renderStatusTags(combat.playerStatuses, locale).map((st) => (
-                  <span
+                  <InfoTip
                     key={st.label}
-                    title={st.title}
-                    className={`rounded border px-1.5 py-0.5 text-[11px] font-medium cursor-help ${st.tone}`}
+                    tip={st.title}
+                    label={st.label}
+                    className={`rounded border px-1.5 py-0.5 text-[11px] font-medium ${st.tone}`}
                   >
                     {st.label} <span className="font-mono-num">{st.value}</span>
-                  </span>
+                  </InfoTip>
                 ))}
               </div>
             )}
@@ -1057,7 +1121,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
         </div>
 
         {/* Right Side: Diagonal Staggered Enemy Formation (前后交叉斜站位) */}
-        <div className="flex flex-wrap items-end justify-center gap-6 sm:gap-10 md:mr-6">
+        <div className="flex w-full flex-nowrap items-start justify-center gap-2 md:mr-6 md:w-auto md:flex-wrap md:items-end md:gap-10">
           {combat.enemies.map((enemy, idx) => {
             const dead = enemy.hp <= 0;
             const isHit = hitEnemyUids.includes(enemy.uid);
@@ -1077,6 +1141,9 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
             const intentSubtitle = tIntentLabel(enemy.intent, locale);
             const enemyVfx = combatVfx.filter((v) => v.targetUid === enemy.uid);
 
+            // Phones: enemies share one row.
+            const phoneWidthCls =
+              combat.enemies.length >= 3 ? 'w-[32%]' : combat.enemies.length === 2 ? 'w-[48%]' : 'w-[70%]';
             // Stagger multi-enemy positions diagonally (front-left vs back-right depth)
             const staggerCls =
               combat.enemies.length > 1
@@ -1129,7 +1196,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                   if (!dead) handleDropCard(enemy.uid);
                 }}
                 onClick={() => handleEnemyClick(enemy)}
-                className={`relative flex flex-col items-center rounded-2xl outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-4 focus-visible:ring-offset-transparent ${staggerCls} ${
+                className={`relative flex min-w-0 flex-col items-center ${phoneWidthCls} md:w-auto rounded-2xl outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-4 focus-visible:ring-offset-transparent ${staggerCls} ${
                   dead
                     ? 'opacity-15 grayscale pointer-events-none scale-90'
                     : isTargetingEnemy
@@ -1161,10 +1228,12 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
 
                 {/* Enemy Intent */}
                 {!dead && (
-                  <div className="mb-2 flex flex-col items-center gap-1">
-                    {renderIntent(enemy)}
+                  <div className="mb-2 flex w-full flex-col items-center gap-1">
+                    <InfoTip tip={intentSubtitle} label={enemyDisplayName} placement="bottom">
+                      {renderIntent(enemy)}
+                    </InfoTip>
                     {enemy.charge && <ChargeBar charge={enemy.charge} locale={locale} />}
-                    <span className="text-[11px] text-slate-300 max-w-[190px] truncate drop-shadow">
+                    <span className="max-w-full truncate text-[11px] text-slate-300 drop-shadow md:max-w-[190px]">
                       {intentSubtitle}
                     </span>
                   </div>
@@ -1187,14 +1256,14 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
 
                 {/* Borderless Enemy Figure Standing on Arena Shadow */}
                 <div className="relative flex items-center justify-center">
-                  <div className="pointer-events-none absolute -bottom-2 left-1/2 h-7 w-40 -translate-x-1/2 rounded-full bg-black/80 blur-md" />
+                  <div className="pointer-events-none absolute -bottom-2 left-1/2 h-5 w-20 -translate-x-1/2 rounded-full bg-black/80 blur-md md:h-7 md:w-40" />
                   {(isTargetingEnemy || draggingCardUid) && !dead && (
-                    <div className="pointer-events-none absolute -bottom-1 left-1/2 h-5 w-40 -translate-x-1/2 rounded-full border-2 border-amber-400/80 shadow-[0_0_24px_rgba(245,158,11,0.55)]" />
+                    <div className="pointer-events-none absolute -bottom-1 left-1/2 h-4 w-20 -translate-x-1/2 rounded-full border-2 border-amber-400/80 shadow-[0_0_24px_rgba(245,158,11,0.55)] md:h-5 md:w-40" />
                   )}
 
                   <div
                     className={`relative ${
-                      enemy.isBoss ? 'h-56 w-56 sm:h-68 sm:w-68' : 'h-44 w-44 sm:h-52 sm:w-52'
+                      enemy.isBoss ? 'h-36 w-36 md:h-68 md:w-68' : 'h-24 w-24 md:h-52 md:w-52'
                     } transition-transform ${
                       isHit
                         ? 'animate-hit-shake brightness-150'
@@ -1220,8 +1289,8 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                 </div>
 
                 {/* Enemy Name & HP Bar */}
-                <div className="mt-2.5 w-48 sm:w-56 rounded-xl bg-[#0b0e14]/70 px-3 py-2 backdrop-blur-sm border border-white/8">
-                  <div className="mb-1 flex items-center justify-between text-xs">
+                <div className="mt-1.5 w-full rounded-xl bg-[#0b0e14]/70 px-2 py-1.5 backdrop-blur-sm border border-white/8 md:mt-2.5 md:w-56 md:px-3 md:py-2">
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-x-1 text-[11px] md:text-xs">
                     <span className="font-semibold text-slate-100 truncate">
                       {enemyDisplayName}
                     </span>
@@ -1240,13 +1309,14 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                   {statuses.length > 0 && (
                     <div className="mt-2 flex flex-wrap justify-center gap-1">
                       {statuses.map((st) => (
-                        <span
+                        <InfoTip
                           key={st.label}
-                          title={st.title}
-                          className={`rounded border px-1.5 py-0.5 text-[11px] font-medium cursor-help ${st.tone}`}
+                          tip={st.title}
+                          label={st.label}
+                          className={`rounded border px-1.5 py-0.5 text-[11px] font-medium ${st.tone}`}
                         >
                           {st.label} <span className="font-mono-num">{st.value}</span>
-                        </span>
+                        </InfoTip>
                       ))}
                     </div>
                   )}
@@ -1261,20 +1331,44 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
           piles+End Turn], with both side groups stacked vertically so the hand
           keeps most of the width. Below 1024px the controls share the first row
           and the hand takes the full second row. */}
-      <div className="relative z-20 border-t border-white/10 bg-[#0d1118]/92 px-4 py-4 backdrop-blur-md sm:px-6">
-        <div className="mx-auto grid max-w-[1440px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
+      <div className="sticky bottom-0 z-30 border-t border-white/10 bg-[#0d1118]/95 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md md:relative md:z-20 md:px-6 md:py-4">
+        {(() => {
+          const card = previewCardUid ? combat.hand.find((c) => c.uid === previewCardUid) : undefined;
+          if (!card) return null;
+          const def = CARD_DEFS[card.defId];
+          const cost = getCardCost(card);
+          const hint =
+            cost === -2
+              ? copy.cannotPlay
+              : cost > combat.energy
+              ? copy.notEnoughEnergy
+              : def?.target === 'enemy' && livingEnemies.length > 1
+              ? copy.tapAgainToTarget
+              : copy.tapAgainToPlay;
+          return (
+            <div className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-3 flex -translate-x-1/2 flex-col items-center gap-2" data-testid="card-preview">
+              <div className="pointer-events-auto">
+                <CardView card={card} locale={locale} state={state} targetEnemy={previewEnemy} onClick={() => handleCardClick(card)} />
+              </div>
+              <div className="rounded-lg border border-amber-400/40 bg-[#0b0e14]/90 px-3 py-1 text-xs font-semibold text-amber-200 shadow">
+                {hint}
+              </div>
+            </div>
+          );
+        })()}
+        <div className="mx-auto grid max-w-[1440px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 md:gap-x-4 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
           {/* Left: Energy & Ember */}
-          <div className="col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 lg:flex-col lg:flex-nowrap lg:items-start">
+          <div className="col-start-1 row-start-1 flex min-w-0 flex-nowrap items-center gap-x-2 gap-y-2 md:flex-wrap md:gap-x-4 lg:flex-col lg:flex-nowrap lg:items-start">
             <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 flex-col items-center justify-center rounded-xl border border-amber-400/60 bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.3)]">
+              <div className="flex h-11 w-11 flex-col items-center justify-center rounded-xl border border-amber-400/60 md:h-14 md:w-14 bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.3)]">
                 <Zap className="h-4 w-4" />
                 <span className="font-mono-num text-base font-extrabold leading-none">
                   {combat.energy}/{combat.maxEnergy}
                 </span>
               </div>
-              <div className="text-xs text-slate-400">
+              <div className="hidden text-xs text-slate-400 md:block">
                 <div className="font-semibold text-slate-200">{copy.energy}</div>
-                <div>{copy.keyHint}</div>
+                {!isTouch && <div>{copy.keyHint}</div>}
               </div>
             </div>
 
@@ -1284,6 +1378,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
               stokeMode={stokeMode}
               onToggleStoke={() => setStokeMode((m) => !m)}
               onUseAbility={onUseAbility}
+              isTouch={isTouch}
             />
 
           </div>
@@ -1314,10 +1409,11 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
               >
                 <CardView
                   card={card}
+                  mini={isPhone}
                   locale={locale}
                   state={state}
                   targetEnemy={previewEnemy}
-                  selected={selectedCardUid === card.uid}
+                  selected={selectedCardUid === card.uid || previewCardUid === card.uid}
                   discardMode={Boolean(combat.pendingDiscard)}
                   stokeMode={stokeMode}
                   shortcutNumber={idx < 9 ? idx + 1 : undefined}
@@ -1342,7 +1438,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
           <div className="col-start-2 row-start-1 flex flex-col items-end gap-2 lg:col-start-3">
             {totalIncomingDamage > 0 && (
               <div
-                className={`text-[11px] font-mono-num ${
+                className={`hidden text-[11px] font-mono-num md:block ${
                   netIncomingDamage > 0 ? 'text-rose-300' : 'text-emerald-300'
                 }`}
               >
@@ -1352,14 +1448,14 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
               </div>
             )}
             <div className="flex items-center justify-end gap-3 lg:flex-col lg:items-end">
-              <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="hidden flex-wrap items-center justify-end gap-2 md:flex">
                 <button
                   type="button"
                   onClick={() => setInspectPile('draw')}
                   className="flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#161c26] px-3 py-2 text-xs text-slate-200 hover:border-sky-400/50 cursor-pointer"
                 >
                   <Layers className="h-3.5 w-3.5 text-sky-400" />
-                  <span>{copy.drawPile}</span>
+                  <span className="sr-only sm:not-sr-only">{copy.drawPile}</span>
                   <span className="font-mono-num font-bold text-white">
                     {combat.drawPile.length}
                   </span>
@@ -1369,7 +1465,8 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                   onClick={() => setInspectPile('discard')}
                   className="flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#161c26] px-3 py-2 text-xs text-slate-200 hover:border-amber-400/50 cursor-pointer"
                 >
-                  <span>{copy.discardPile}</span>
+                  <Archive className="h-3.5 w-3.5 text-amber-300" />
+                  <span className="sr-only sm:not-sr-only">{copy.discardPile}</span>
                   <span className="font-mono-num font-bold text-white">
                     {combat.discardPile.length}
                   </span>
@@ -1381,7 +1478,7 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                     className="flex items-center gap-1.5 rounded-lg border border-white/12 bg-[#161c26] px-3 py-2 text-xs text-slate-300 hover:border-rose-400/50 cursor-pointer"
                   >
                     <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                    <span>{copy.exhaustPile}</span>
+                    <span className="sr-only sm:not-sr-only">{copy.exhaustPile}</span>
                     <span className="font-mono-num font-bold text-white">
                       {combat.exhaustPile.length}
                     </span>
@@ -1393,9 +1490,9 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
                 type="button"
                 disabled={combat.enemyTurnInProgress || Boolean(combat.pendingDiscard)}
                 onClick={onEndTurn}
-                className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-slate-950 shadow-lg hover:bg-amber-400 disabled:opacity-45 disabled:cursor-not-allowed transition-colors whitespace-nowrap cursor-pointer"
+                className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-lg md:px-6 md:py-3 hover:bg-amber-400 disabled:opacity-45 disabled:cursor-not-allowed transition-colors whitespace-nowrap cursor-pointer"
               >
-                {combat.enemyTurnInProgress ? copy.enemyTurn : copy.endTurn}
+                {combat.enemyTurnInProgress ? copy.enemyTurn : isTouch ? copy.endTurn.replace(/\s*\(E\)/, '') : copy.endTurn}
               </button>
             </div>
           </div>
@@ -1455,7 +1552,7 @@ const ChargeBar: React.FC<{ charge: NonNullable<EnemyInstance['charge']>; locale
   const need = Math.max(0, charge.threshold - charge.progress);
   return (
     <div
-      className="w-44 rounded-md border border-orange-400/40 bg-[#1a1210]/90 px-2 py-1 text-[10.5px] text-orange-100 shadow"
+      className="w-full max-w-44 rounded-md border border-orange-400/40 bg-[#1a1210]/90 px-2 py-1 text-[10.5px] text-orange-100 shadow"
       data-testid="charge-bar"
     >
       <div className="mb-0.5 flex items-center justify-between font-semibold">
@@ -1486,7 +1583,8 @@ const EmberPanel: React.FC<{
   stokeMode: boolean;
   onToggleStoke: () => void;
   onUseAbility: () => void;
-}> = ({ state, locale, stokeMode, onToggleStoke, onUseAbility }) => {
+  isTouch?: boolean;
+}> = ({ state, locale, stokeMode, onToggleStoke, onUseAbility, isTouch = false }) => {
   const copy = UI_COPY[locale];
   const combat = state.combat!;
   const ember = combat.ember || 0;
@@ -1499,13 +1597,19 @@ const EmberPanel: React.FC<{
   const AbilityIcon = ability.id === 'temper' ? Hammer : Wind;
   return (
     <div className="flex flex-col gap-1.5" data-testid="ember-panel">
-      <div className="flex items-center gap-2" title={copy.emberTip}>
-        <span className="text-xs font-semibold text-orange-200">{copy.ember}</span>
+      <div className="flex items-center gap-2">
+        <InfoTip
+          tip={copy.emberTip}
+          label={copy.ember}
+          className="whitespace-nowrap text-xs font-semibold text-orange-200 underline decoration-dotted underline-offset-2"
+        >
+          {copy.ember}
+        </InfoTip>
         <div className="flex gap-0.5" aria-label={`${copy.ember} ${ember}/${cap}`}>
           {Array.from({ length: cap }, (_, i) => (
             <Flame
               key={i}
-              className={`h-3.5 w-3.5 transition-colors ${
+              className={`h-2.5 w-2.5 transition-colors md:h-3.5 md:w-3.5 ${
                 i < ember
                   ? ember >= cap
                     ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.9)]'
@@ -1526,7 +1630,7 @@ const EmberPanel: React.FC<{
           disabled={!stokeAvailable && !stokeMode}
           title={copy.stokeTip}
           data-testid="stoke-btn"
-          className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+          className={`flex items-center gap-1 whitespace-nowrap rounded-lg border px-2 py-1 text-xs font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 md:px-2.5 ${
             stokeMode
               ? 'border-orange-300 bg-orange-500 text-slate-950'
               : 'border-orange-500/50 bg-orange-950/60 text-orange-200 hover:border-orange-300'
@@ -1541,7 +1645,7 @@ const EmberPanel: React.FC<{
           disabled={!abilityAvailable}
           title={copy.abilityDescs[ability.id]}
           data-testid="ability-btn"
-          className="flex items-center gap-1 rounded-lg border border-amber-400/50 bg-amber-950/60 px-2.5 py-1 text-xs font-semibold text-amber-100 hover:border-amber-300 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-amber-400/50 bg-amber-950/60 px-2 py-1 text-xs font-semibold text-amber-100 md:px-2.5 hover:border-amber-300 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
         >
           <AbilityIcon className="h-3.5 w-3.5" />
           <span>{copy.abilityNames[ability.id]}</span>
@@ -1557,7 +1661,7 @@ const EmberPanel: React.FC<{
         )}
       </div>
       <div className="text-[10px] text-slate-500">
-        {abilityUsed ? `${copy.abilityNames[ability.id]} · ${copy.abilityUsed}` : copy.emberKeyHint}
+        {abilityUsed ? `${copy.abilityNames[ability.id]} · ${copy.abilityUsed}` : isTouch ? '' : copy.emberKeyHint}
       </div>
     </div>
   );
