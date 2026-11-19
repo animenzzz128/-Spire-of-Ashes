@@ -5,7 +5,7 @@
 ---
 
 ## Overview | 游戏简介
-https://spire-of-ashes.ai.studio 
+Play in the browser: https://animenzzz128.github.io/spire-of-ashes/ (GitHub Pages, deployed from `main`) 
 
 **《烬塔 · Spire of Ashes》** 是一款回合制 Roguelike 卡牌构筑爬塔策略游戏，卡牌、遗物、药水与敌人均为原创命名。你将踏入十五层黑曜烬塔，洞察敌人的真实行动意图，精准规划能量与格挡，在营火、神秘事件与高塔商人之间权衡取舍，构筑成型牌组并击败第 15 层的终极首领——黑曜守望者。
 
