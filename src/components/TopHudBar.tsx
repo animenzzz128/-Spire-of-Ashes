@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   BarChart3,
+  Gem,
   BookOpen,
   Coins,
   FlaskConical,
@@ -17,6 +19,8 @@ import { HERO_CLASSES } from '../game/heroes';
 import { HERO_EN, Locale, UI_COPY, tPotion, tRelic } from '../game/i18n';
 import { TOTAL_FLOORS } from '../game/map';
 import { PotionDef, RelicDef, RunState } from '../game/types';
+import { useIsTouch } from './InfoTip';
+import { DialogFrame } from './useDialog';
 
 // One CJK character ("血焰徽记" -> "血") or up to two initials ("Bloodfire Sigil" -> "BS").
 function relicGlyph(name: string): string {
@@ -66,17 +70,31 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
   const [hoveredRelic, setHoveredRelic] = useState<RelicDef | null>(null);
   const [hoveredPotion, setHoveredPotion] = useState<PotionDef | null>(null);
   const [confirmAbandon, setConfirmAbandon] = useState(false);
+  // Touch screens: tapping a potion opens Use / Discard instead of using it at once.
+  const isTouch = useIsTouch();
+  const [potionMenu, setPotionMenu] = useState<number | null>(null);
+  // Relics are hidden from the bar below 1024px; this drawer lists them.
+  const [showRelics, setShowRelics] = useState(false);
+
+  useEffect(() => {
+    if (potionMenu === null) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!(e.target as Element | null)?.closest?.('[data-potion-slot]')) setPotionMenu(null);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [potionMenu]);
 
   const hoveredRelicText = hoveredRelic ? tRelic(hoveredRelic.id, locale) : null;
   const hoveredPotionText = hoveredPotion ? tPotion(hoveredPotion.id, locale) : null;
 
   return (
-    <header className="relative z-40 border-b border-white/10 bg-[#0d1118]/95 backdrop-blur-md">
+    <header className="relative z-40 border-b border-white/10 bg-[#0d1118]/95 pt-[env(safe-area-inset-top)] backdrop-blur-md">
       <div className="mx-auto flex max-w-[1440px] flex-wrap xl:flex-nowrap items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
         {/* Zone 1: Hero & Vital Stats */}
-        <div className="flex min-w-0 flex-wrap items-center gap-3 sm:gap-5 xl:shrink-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-5 xl:shrink-0">
           <div className="flex items-center gap-2">
-            <span className="font-display text-base font-bold tracking-wide text-amber-400 whitespace-nowrap">
+            <span className="hidden font-display text-base font-bold tracking-wide text-amber-400 whitespace-nowrap sm:inline">
               {heroName}
             </span>
             {state.ascension > 0 && (
@@ -112,11 +130,19 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
                 (pot.id === 'heartblood_elixir' ||
                   (state.phase === 'COMBAT' && !state.combat?.enemyTurnInProgress));
               return (
-                <div key={idx} className="group relative">
+                <div key={idx} className="group relative" data-potion-slot>
                   <button
                     type="button"
-                    disabled={!usableNow}
-                    onClick={() => usableNow && onUsePotion(idx)}
+                    disabled={!pot || (!usableNow && !isTouch)}
+                    aria-haspopup={isTouch ? 'menu' : undefined}
+                    onClick={() => {
+                      if (!pot) return;
+                      if (isTouch) {
+                        setPotionMenu(potionMenu === idx ? null : idx);
+                        return;
+                      }
+                      if (usableNow) onUsePotion(idx);
+                    }}
                     onMouseEnter={() => pot && setHoveredPotion(pot)}
                     onMouseLeave={() => setHoveredPotion(null)}
                     title={
@@ -154,10 +180,57 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
                       ×
                     </button>
                   )}
+                  {isTouch && potionMenu === idx && pot && potTxt && (
+                    <>
+                      <div
+                        role="menu"
+                        className="absolute left-0 top-full z-50 mt-2 w-56 rounded-xl border border-white/15 bg-[#12161f] p-3 text-xs shadow-2xl"
+                      >
+                        <div className="font-semibold text-slate-100">{potTxt.name}</div>
+                        <div className="mt-1 leading-snug text-slate-300">{potTxt.desc}</div>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={!usableNow}
+                            onClick={() => {
+                              setPotionMenu(null);
+                              onUsePotion(idx);
+                            }}
+                            className="flex-1 rounded-lg bg-amber-500 px-3 py-2 font-bold text-slate-950 disabled:opacity-40 cursor-pointer"
+                          >
+                            {copy.potionUse}
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setPotionMenu(null);
+                              onDiscardPotion(idx);
+                            }}
+                            className="flex-1 rounded-lg border border-rose-400/50 px-3 py-2 font-semibold text-rose-200 cursor-pointer"
+                          >
+                            {copy.potionDiscard}
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               );
             })}
           </div>
+
+          {/* Relic drawer button: the relic strip below is hidden under 1024px. */}
+          <button
+            type="button"
+            onClick={() => setShowRelics(true)}
+            aria-label={`${copy.relicsLabel} (${state.relics.length})`}
+            className="flex items-center gap-1 rounded-lg border border-amber-500/30 bg-[#161c26] px-2 py-1.5 text-xs font-semibold text-amber-200 lg:hidden cursor-pointer"
+          >
+            <Gem className="h-3.5 w-3.5 text-amber-400" />
+            <span className="font-mono-num">{state.relics.length}</span>
+          </button>
         </div>
 
         {/* Zone 2: Relics Strip — compact glyph chips so the HUD stays one row;
@@ -306,6 +379,43 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
           )}
         </div>
       )}
+      {showRelics &&
+        createPortal(
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center" onClick={() => setShowRelics(false)}>
+          <DialogFrame
+            label={copy.relicsLabel}
+            onClose={() => setShowRelics(false)}
+            className="max-h-[80dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/15 bg-[#12161f] p-4 shadow-2xl outline-none"
+          >
+            <div onClick={(e) => e.stopPropagation()}>
+              <div className="mb-3 flex items-center justify-between">
+                <span className="font-semibold text-amber-200">
+                  {copy.relicsLabel} ({state.relics.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowRelics(false)}
+                  className="rounded-lg border border-white/15 px-3 py-1 text-xs text-slate-200 cursor-pointer"
+                >
+                  {copy.close}
+                </button>
+              </div>
+              <ul className="space-y-2">
+                {state.relics.map((relic) => {
+                  const rt = tRelic(relic.id, locale);
+                  return (
+                    <li key={relic.id} className="rounded-lg border border-white/10 bg-[#171d28] p-3">
+                      <div className="text-sm font-semibold text-amber-200">{rt.name}</div>
+                      <div className="mt-1 text-xs leading-snug text-slate-300">{rt.desc}</div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </DialogFrame>
+        </div>,
+          document.body
+        )}
     </header>
   );
 };
