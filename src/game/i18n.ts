@@ -65,7 +65,7 @@ export const UI_COPY = {
     bossFight: '塔顶首领战',
     eliteFight: '精英守卫战',
     normalFight: '常规遭遇战',
-    doubleDmgActive: '幻影绝杀生效中（攻击双倍伤害）',
+    doubleDmgActive: '梦魇杀机生效中（攻击双倍伤害）',
     combatLog: '战况记录',
     energy: '能量',
     keyHint: '快捷键 1-9 / 拖拽',
@@ -135,7 +135,7 @@ export const UI_COPY = {
     statsSub: '实时追踪伤害构成、防御格挡效率与核心输出卡牌。',
     damageBreakdown: '伤害来源构成',
     attackDamage: '直接攻击伤害',
-    poisonDamage: '剧毒与尸爆伤害',
+    poisonDamage: '剧毒与腐爆伤害',
     relicDamage: '遗物 / 反伤伤害',
     defenseStats: '防御与续航效率',
     totalBlockGained: '累计获得格挡',
@@ -222,7 +222,7 @@ export const UI_COPY = {
     bossFight: 'Summit Boss',
     eliteFight: 'Elite Encounter',
     normalFight: 'Combat Encounter',
-    doubleDmgActive: 'Phantasmal Killer Active (2x Attack Damage)',
+    doubleDmgActive: 'Night Terror Active (2x Attack Damage)',
     combatLog: 'Combat Log',
     energy: 'Energy',
     keyHint: 'Keys 1-9 / Drag',
@@ -292,7 +292,7 @@ export const UI_COPY = {
     statsSub: 'Real-time breakdown of damage sources, block efficiency, and MVP cards.',
     damageBreakdown: 'Damage by Source',
     attackDamage: 'Attack Damage',
-    poisonDamage: 'Poison & Corpse Explosion',
+    poisonDamage: 'Poison & Rotburst',
     relicDamage: 'Relics & Thorns',
     defenseStats: 'Defense & Sustainment',
     totalBlockGained: 'Total Block Gained',
@@ -328,112 +328,112 @@ export const HERO_EN: Record<
 > = {
   ironwarden: {
     name: 'Ironwarden',
-    subtitle: 'Strength & Barricade',
-    archetypes: ['Strength Scaling', 'Iron Barricade', 'Blood Sacrifice'],
+    subtitle: 'Strength & Bastion',
+    archetypes: ['Strength Scaling', 'Iron Bastion', 'Blood Sacrifice'],
     description:
       'A battle-scarred legionnaire who overwhelms foes with towering Strength and heavy Block.',
   },
   shadowweaver: {
     name: 'Shadowweaver',
-    subtitle: 'Poison & Shiv Tempo',
-    archetypes: ['Poison Stacking', '0-Cost Shivs', 'Draw & Discard'],
+    subtitle: 'Poison & Knife Tempo',
+    archetypes: ['Poison Stacking', '0-Cost Knives', 'Draw & Discard'],
     description:
-      'An arcane assassin who dismantles guardians with Weak debuffs, Poison catalysts, and Shivs.',
+      'An arcane assassin who dismantles guardians with Weak debuffs, stacked Poison, and volleys of throwing knives.',
   },
 };
 
 export const CARD_EN: Record<string, { name: string; desc: string; upgDesc?: string }> = {
   iron_strike: { name: 'Iron Strike', desc: 'Deal 6 damage.', upgDesc: 'Deal 9 damage.' },
   iron_defend: { name: 'Iron Defend', desc: 'Gain 6 Block.', upgDesc: 'Gain 9 Block.' },
-  bash: { name: 'Bash', desc: 'Deal 8 damage. Apply 2 Vulnerable.', upgDesc: 'Deal 10 damage. Apply 3 Vulnerable.' },
-  cleave: { name: 'Cleave', desc: 'Deal 9 damage to ALL enemies.', upgDesc: 'Deal 12 damage to ALL enemies.' },
-  pommel_strike: { name: 'Pommel Strike', desc: 'Deal 9 damage. Draw 1 card.', upgDesc: 'Deal 10 damage. Draw 2 cards.' },
-  twin_strike: { name: 'Twin Strike', desc: 'Deal 6 damage twice.', upgDesc: 'Deal 8 damage twice.' },
-  shrug_it_off: { name: 'Shrug It Off', desc: 'Gain 8 Block. Draw 1 card.', upgDesc: 'Gain 11 Block. Draw 1 card.' },
-  iron_wave: { name: 'Iron Wave', desc: 'Gain 6 Block. Deal 6 damage.', upgDesc: 'Gain 8 Block. Deal 8 damage.' },
-  body_slam: { name: 'Body Slam', desc: 'Deal damage equal to your Block.', upgDesc: 'Deal damage equal to your Block.' },
-  heavy_blade: { name: 'Heavy Blade', desc: 'Deal 14 damage. Strength affects this 3x.', upgDesc: 'Deal 14 damage. Strength affects this 5x.' },
-  inflame: { name: 'Inflame', desc: 'Gain 3 Strength.', upgDesc: 'Gain 4 Strength.' },
-  metallicize: { name: 'Metallicize', desc: 'Gain 3 Block at the end of each turn.', upgDesc: 'Gain 4 Block at the end of each turn.' },
-  bloodletting: { name: 'Bloodletting', desc: 'Lose 3 HP. Gain 2 Energy.', upgDesc: 'Lose 3 HP. Gain 3 Energy.' },
-  battle_trance: { name: 'Battle Trance', desc: 'Draw 3 cards. No more draw this turn.', upgDesc: 'Draw 4 cards. No more draw this turn.' },
-  intimidate: { name: 'Intimidate', desc: 'Apply 1 Weak to ALL enemies. Exhaust.', upgDesc: 'Apply 2 Weak to ALL enemies. Exhaust.' },
-  whirlwind: { name: 'Whirlwind', desc: 'Deal 5 damage to ALL enemies X times.', upgDesc: 'Deal 8 damage to ALL enemies X times.' },
-  uppercut: { name: 'Uppercut', desc: 'Deal 13 damage. Apply 1 Weak & 1 Vulnerable.', upgDesc: 'Deal 13 damage. Apply 2 Weak & 2 Vulnerable.' },
-  impervious: { name: 'Impervious', desc: 'Gain 30 Block. Exhaust.', upgDesc: 'Gain 40 Block. Exhaust.' },
-  barricade: { name: 'Barricade', desc: 'Block is no longer lost at start of turn.' },
-  offering: { name: 'Offering', desc: 'Lose 6 HP. Gain 2 Energy. Draw 3 cards. Exhaust.', upgDesc: 'Lose 6 HP. Gain 2 Energy. Draw 5 cards. Exhaust.' },
-  demon_form: { name: 'Demon Form', desc: 'Gain 2 Strength at the start of each turn.', upgDesc: 'Gain 3 Strength at the start of each turn.' },
-  reaper: { name: 'Reaper', desc: 'Deal 6 damage to ALL. Heal unblocked damage. Exhaust.', upgDesc: 'Deal 7 damage to ALL. Heal unblocked damage. Exhaust.' },
+  armor_breaker: { name: 'Armor Breaker', desc: 'Deal 8 damage. Apply 2 Vulnerable.', upgDesc: 'Deal 10 damage. Apply 3 Vulnerable.' },
+  sweep_the_ranks: { name: 'Sweep the Ranks', desc: 'Deal 9 damage to ALL enemies.', upgDesc: 'Deal 12 damage to ALL enemies.' },
+  hilt_jab: { name: 'Hilt Jab', desc: 'Deal 9 damage. Draw 1 card.', upgDesc: 'Deal 10 damage. Draw 2 cards.' },
+  double_hew: { name: 'Double Hew', desc: 'Deal 6 damage twice.', upgDesc: 'Deal 8 damage twice.' },
+  weather_the_blow: { name: 'Weather the Blow', desc: 'Gain 8 Block. Draw 1 card.', upgDesc: 'Gain 11 Block. Draw 1 card.' },
+  guarded_blow: { name: 'Guarded Blow', desc: 'Gain 6 Block. Deal 6 damage.', upgDesc: 'Gain 8 Block. Deal 8 damage.' },
+  shield_ram: { name: 'Shield Ram', desc: 'Deal damage equal to your Block.', upgDesc: 'Deal damage equal to your Block.' },
+  crushing_maul: { name: 'Crushing Maul', desc: 'Deal 14 damage. Strength affects this 3x.', upgDesc: 'Deal 14 damage. Strength affects this 5x.' },
+  kindled_fury: { name: 'Kindled Fury', desc: 'Gain 3 Strength.', upgDesc: 'Gain 4 Strength.' },
+  heavy_mail: { name: 'Heavy Mail', desc: 'Gain 3 Block at the end of each turn.', upgDesc: 'Gain 4 Block at the end of each turn.' },
+  blood_surge: { name: 'Blood Surge', desc: 'Lose 3 HP. Gain 2 Energy.', upgDesc: 'Lose 3 HP. Gain 3 Energy.' },
+  tunnel_vision: { name: 'Tunnel Vision', desc: 'Draw 3 cards. No more draw this turn.', upgDesc: 'Draw 4 cards. No more draw this turn.' },
+  daunting_roar: { name: 'Daunting Roar', desc: 'Apply 1 Weak to ALL enemies. Exhaust.', upgDesc: 'Apply 2 Weak to ALL enemies. Exhaust.' },
+  blade_cyclone: { name: 'Blade Cyclone', desc: 'Deal 5 damage to ALL enemies X times.', upgDesc: 'Deal 8 damage to ALL enemies X times.' },
+  jawbreaker: { name: 'Jawbreaker', desc: 'Deal 13 damage. Apply 1 Weak & 1 Vulnerable.', upgDesc: 'Deal 13 damage. Apply 2 Weak & 2 Vulnerable.' },
+  mountain_stand: { name: 'Mountain Stance', desc: 'Gain 30 Block. Exhaust.', upgDesc: 'Gain 40 Block. Exhaust.' },
+  eternal_bastion: { name: 'Eternal Bastion', desc: 'Block is no longer lost at start of turn.' },
+  blood_covenant: { name: 'Blood Covenant', desc: 'Lose 6 HP. Gain 2 Energy. Draw 3 cards. Exhaust.', upgDesc: 'Lose 6 HP. Gain 2 Energy. Draw 5 cards. Exhaust.' },
+  infernal_avatar: { name: 'Infernal Avatar', desc: 'Gain 2 Strength at the start of each turn.', upgDesc: 'Gain 3 Strength at the start of each turn.' },
+  soul_harvest: { name: 'Soul Harvest', desc: 'Deal 6 damage to ALL. Heal unblocked damage. Exhaust.', upgDesc: 'Deal 7 damage to ALL. Heal unblocked damage. Exhaust.' },
   shadow_strike: { name: 'Shadow Strike', desc: 'Deal 6 damage.', upgDesc: 'Deal 9 damage.' },
   shadow_defend: { name: 'Shadow Defend', desc: 'Gain 5 Block.', upgDesc: 'Gain 8 Block.' },
-  neutralize: { name: 'Neutralize', desc: 'Deal 3 damage. Apply 1 Weak.', upgDesc: 'Deal 4 damage. Apply 2 Weak.' },
-  survivor: { name: 'Survivor', desc: 'Gain 8 Block. Discard 1 card.', upgDesc: 'Gain 11 Block. Discard 1 card.' },
-  poisoned_stab: { name: 'Poisoned Stab', desc: 'Deal 6 damage. Apply 3 Poison.', upgDesc: 'Deal 8 damage. Apply 4 Poison.' },
-  deadly_poison: { name: 'Deadly Poison', desc: 'Apply 5 Poison.', upgDesc: 'Apply 7 Poison.' },
-  blade_dance: { name: 'Blade Dance', desc: 'Add 3 Shivs to your hand.', upgDesc: 'Add 4 Shivs to your hand.' },
-  backflip: { name: 'Backflip', desc: 'Gain 5 Block. Draw 2 cards.', upgDesc: 'Gain 8 Block. Draw 2 cards.' },
-  acrobatics: { name: 'Acrobatics', desc: 'Draw 3 cards. Discard 1 card.', upgDesc: 'Draw 4 cards. Discard 1 card.' },
-  dagger_spray: { name: 'Dagger Spray', desc: 'Deal 4 damage to ALL enemies twice.', upgDesc: 'Deal 6 damage to ALL enemies twice.' },
-  cloak_and_dagger: { name: 'Cloak & Dagger', desc: 'Gain 6 Block. Add 1 Shiv.', upgDesc: 'Gain 6 Block. Add 2 Shivs.' },
-  dash: { name: 'Dash', desc: 'Gain 10 Block. Deal 10 damage.', upgDesc: 'Gain 13 Block. Deal 13 damage.' },
-  blur: { name: 'Blur', desc: 'Gain 5 Block. Retain Block next turn.', upgDesc: 'Gain 8 Block. Retain Block next turn.' },
-  catalyst: { name: 'Catalyst', desc: 'Double target Poison. Exhaust.', upgDesc: 'Triple target Poison. Exhaust.' },
-  footwork: { name: 'Footwork', desc: 'Gain 2 Dexterity.', upgDesc: 'Gain 3 Dexterity.' },
-  noxious_fumes: { name: 'Noxious Fumes', desc: 'Apply 2 Poison to ALL enemies each turn.', upgDesc: 'Apply 3 Poison to ALL enemies each turn.' },
-  leg_sweep: { name: 'Leg Sweep', desc: 'Apply 2 Weak. Gain 11 Block.', upgDesc: 'Apply 3 Weak. Gain 14 Block.' },
-  adrenaline: { name: 'Adrenaline', desc: 'Gain 1 Energy. Draw 2 cards. Exhaust.', upgDesc: 'Gain 2 Energy. Draw 2 cards. Exhaust.' },
-  envenom: { name: 'Envenom', desc: 'Unblocked attack hits apply 1 Poison.' },
-  phantasmal_killer: { name: 'Phantasmal Killer', desc: 'Next turn, your attacks deal 2x damage.' },
-  corpse_explosion: { name: 'Corpse Explosion', desc: 'Apply 6 Poison. On death, deal Max HP to ALL.', upgDesc: 'Apply 9 Poison. On death, deal Max HP to ALL.' },
-  shiv: { name: 'Shiv', desc: 'Deal 4 damage. Exhaust.', upgDesc: 'Deal 6 damage. Exhaust.' },
-  finesse: { name: 'Finesse', desc: 'Gain 2 Block. Draw 1 card.', upgDesc: 'Gain 4 Block. Draw 1 card.' },
-  flash_of_steel: { name: 'Flash of Steel', desc: 'Deal 3 damage. Draw 1 card.', upgDesc: 'Deal 6 damage. Draw 1 card.' },
-  panacea: { name: 'Panacea', desc: 'Gain 1 Artifact. Exhaust.', upgDesc: 'Gain 2 Artifact. Exhaust.' },
-  apotheosis: { name: 'Apotheosis', desc: 'Upgrade ALL your cards for this combat. Exhaust.' },
+  sapping_cut: { name: 'Sapping Cut', desc: 'Deal 3 damage. Apply 1 Weak.', upgDesc: 'Deal 4 damage. Apply 2 Weak.' },
+  last_refuge: { name: 'Last Refuge', desc: 'Gain 8 Block. Discard 1 card.', upgDesc: 'Gain 11 Block. Discard 1 card.' },
+  viper_lunge: { name: 'Viper Lunge', desc: 'Deal 6 damage. Apply 3 Poison.', upgDesc: 'Deal 8 damage. Apply 4 Poison.' },
+  black_ichor: { name: 'Black Ichor', desc: 'Apply 5 Poison.', upgDesc: 'Apply 7 Poison.' },
+  sleeve_knives: { name: 'Sleeve Knives', desc: 'Add 3 Throwing Knives to your hand.', upgDesc: 'Add 4 Throwing Knives to your hand.' },
+  nimble_retreat: { name: 'Nimble Retreat', desc: 'Gain 5 Block. Draw 2 cards.', upgDesc: 'Gain 8 Block. Draw 2 cards.' },
+  sleight_of_hand: { name: 'Sleight of Hand', desc: 'Draw 3 cards. Discard 1 card.', upgDesc: 'Draw 4 cards. Discard 1 card.' },
+  knife_volley: { name: 'Knife Volley', desc: 'Deal 4 damage to ALL enemies twice.', upgDesc: 'Deal 6 damage to ALL enemies twice.' },
+  veil_and_blade: { name: 'Veil and Blade', desc: 'Gain 6 Block. Add 1 Throwing Knife.', upgDesc: 'Gain 6 Block. Add 2 Throwing Knives.' },
+  gale_rush: { name: 'Gale Rush', desc: 'Gain 10 Block. Deal 10 damage.', upgDesc: 'Gain 13 Block. Deal 13 damage.' },
+  lingering_shade: { name: 'Lingering Shade', desc: 'Gain 5 Block. Retain Block next turn.', upgDesc: 'Gain 8 Block. Retain Block next turn.' },
+  toxic_bloom: { name: 'Toxic Bloom', desc: 'Double target Poison. Exhaust.', upgDesc: 'Triple target Poison. Exhaust.' },
+  phantom_steps: { name: 'Phantom Steps', desc: 'Gain 2 Dexterity.', upgDesc: 'Gain 3 Dexterity.' },
+  creeping_miasma: { name: 'Creeping Miasma', desc: 'Apply 2 Poison to ALL enemies each turn.', upgDesc: 'Apply 3 Poison to ALL enemies each turn.' },
+  hobbling_kick: { name: 'Hobbling Kick', desc: 'Apply 2 Weak. Gain 11 Block.', upgDesc: 'Apply 3 Weak. Gain 14 Block.' },
+  racing_pulse: { name: 'Racing Pulse', desc: 'Gain 1 Energy. Draw 2 cards. Exhaust.', upgDesc: 'Gain 2 Energy. Draw 2 cards. Exhaust.' },
+  serpents_edge: { name: "Serpent's Edge", desc: 'Unblocked attack hits apply 1 Poison.' },
+  night_terror: { name: 'Night Terror', desc: 'Next turn, your attacks deal 2x damage.' },
+  rotburst: { name: 'Rotburst', desc: 'Apply 6 Poison. On death, deal Max HP to ALL.', upgDesc: 'Apply 9 Poison. On death, deal Max HP to ALL.' },
+  throwing_knife: { name: 'Throwing Knife', desc: 'Deal 4 damage. Exhaust.', upgDesc: 'Deal 6 damage. Exhaust.' },
+  deft_poise: { name: 'Deft Poise', desc: 'Gain 2 Block. Draw 1 card.', upgDesc: 'Gain 4 Block. Draw 1 card.' },
+  cold_glint: { name: 'Cold Glint', desc: 'Deal 3 damage. Draw 1 card.', upgDesc: 'Deal 6 damage. Draw 1 card.' },
+  warding_draught: { name: 'Warding Draught', desc: 'Gain 1 Artifact. Exhaust.', upgDesc: 'Gain 2 Artifact. Exhaust.' },
+  molten_epiphany: { name: 'Molten Epiphany', desc: 'Upgrade ALL your cards for this combat. Exhaust.' },
   burn: { name: 'Burn', desc: 'Unplayable. Take 2 damage at end of turn.' },
   wound: { name: 'Wound', desc: 'Unplayable.' },
-  slimed: { name: 'Slimed', desc: 'Exhaust.' },
-  pain: { name: 'Pain', desc: 'Curse · Unplayable. Lose 1 HP whenever you play a card.' },
+  caustic_residue: { name: 'Caustic Residue', desc: 'Exhaust.' },
+  marrow_ache: { name: 'Marrow Ache', desc: 'Curse · Unplayable. Lose 1 HP whenever you play a card.' },
 };
 
 export const RELIC_EN: Record<string, { name: string; desc: string }> = {
-  burning_blood: { name: 'Burning Blood', desc: 'Heal 8 HP at the end of combat.' },
-  ring_of_snake: { name: 'Ring of the Snake', desc: 'Draw 2 extra cards on Turn 1.' },
-  vajra: { name: 'Vajra', desc: 'Start combat with 1 Strength.' },
-  anchor: { name: 'Anchor', desc: 'Start combat with 10 Block.' },
-  smooth_stone: { name: 'Oddly Smooth Stone', desc: 'Start combat with 1 Dexterity.' },
-  lantern: { name: 'Lantern', desc: 'Gain 1 extra Energy on Turn 1.' },
-  bag_of_prep: { name: 'Bag of Preparation', desc: 'Draw 2 extra cards on Turn 1.' },
-  orichalcum: { name: 'Orichalcum', desc: 'If you end turn with 0 Block, gain 6 Block.' },
-  shuriken: { name: 'Shuriken', desc: 'Every 3 Attacks played in a turn grants 1 Strength.' },
-  kunai: { name: 'Kunai', desc: 'Every 3 Attacks played in a turn grants 1 Dexterity.' },
-  meat_on_bone: { name: 'Meat on the Bone', desc: 'If HP <= 50% after combat, heal 12 HP.' },
-  mercury_hourglass: { name: 'Mercury Hourglass', desc: 'Deal 3 damage to ALL enemies each turn.' },
-  horn_cleat: { name: 'Horn Cleat', desc: 'Gain 14 Block at start of Turn 2.' },
-  runic_capacitor: { name: 'Ember Core', desc: '+1 Max Energy per turn.' },
+  bloodfire_sigil: { name: 'Bloodfire Sigil', desc: 'Heal 8 HP at the end of combat.' },
+  nightweave_ring: { name: 'Nightweave Ring', desc: 'Draw 2 extra cards on Turn 1.' },
+  ashen_fang: { name: 'Ashen Fang', desc: 'Start combat with 1 Strength.' },
+  cornerstone: { name: 'Spire Cornerstone', desc: 'Start combat with 10 Block.' },
+  featherstep_charm: { name: 'Featherstep Charm', desc: 'Start combat with 1 Dexterity.' },
+  wayfinder_lamp: { name: "Wayfinder's Lamp", desc: 'Gain 1 extra Energy on Turn 1.' },
+  scout_satchel: { name: "Scout's Satchel", desc: 'Draw 2 extra cards on Turn 1.' },
+  cinderglass_ward: { name: 'Cinderglass Ward', desc: 'If you end turn with 0 Block, gain 6 Block.' },
+  notched_blade: { name: 'Notched Blade', desc: 'Every 3 Attacks played in a turn grants 1 Strength.' },
+  fleet_ribbon: { name: 'Fleet Ribbon', desc: 'Every 3 Attacks played in a turn grants 1 Dexterity.' },
+  hunters_jerky: { name: "Hunter's Jerky", desc: 'If HP <= 50% after combat, heal 12 HP.' },
+  cinder_hourglass: { name: 'Cinder Hourglass', desc: 'Deal 3 damage to ALL enemies each turn.' },
+  watchman_horn: { name: "Watchman's Horn", desc: 'Gain 14 Block at start of Turn 2.' },
+  ember_core: { name: 'Ember Core', desc: '+1 Max Energy per turn.' },
 };
 
 export const POTION_EN: Record<string, { name: string; desc: string }> = {
-  fire_potion: { name: 'Fire Potion', desc: 'Deal 20 damage to target enemy.' },
-  block_potion: { name: 'Block Potion', desc: 'Gain 12 Block.' },
-  strength_potion: { name: 'Strength Potion', desc: 'Gain 2 Strength for this combat.' },
-  poison_potion: { name: 'Poison Potion', desc: 'Apply 6 Poison to target enemy.' },
-  energy_potion: { name: 'Energy Potion', desc: 'Gain 2 Energy.' },
-  swift_potion: { name: 'Swift Potion', desc: 'Draw 3 cards.' },
-  heal_potion: { name: 'Blood Potion', desc: 'Heal 15 HP immediately.' },
+  wildfire_flask: { name: 'Wildfire Flask', desc: 'Deal 20 damage to target enemy.' },
+  stoneskin_tonic: { name: 'Stoneskin Tonic', desc: 'Gain 12 Block.' },
+  berserker_draught: { name: 'Berserker Draught', desc: 'Gain 2 Strength for this combat.' },
+  nightshade_vial: { name: 'Nightshade Vial', desc: 'Apply 6 Poison to target enemy.' },
+  kindling_elixir: { name: 'Kindling Elixir', desc: 'Gain 2 Energy.' },
+  haste_tincture: { name: 'Haste Tincture', desc: 'Draw 3 cards.' },
+  heartblood_elixir: { name: 'Heartblood Elixir', desc: 'Heal 15 HP immediately.' },
 };
 
 export const ENEMY_EN: Record<string, { name: string; title: string }> = {
-  cultist: { name: 'Spire Cultist', title: 'Ritual Apprentice' },
-  jaw_worm: { name: 'Jaw Worm', title: 'Armored Predator' },
-  acid_slime: { name: 'Acid Slime', title: 'Corrosive Ooze' },
-  acid_slime_small: { name: 'Small Acid Slime', title: 'Corrosive Spawn' },
-  looter: { name: 'Spire Looter', title: 'Shadow Cutthroat' },
+  ember_zealot: { name: 'Ember Zealot', title: 'Ash Acolyte' },
+  cinder_burrower: { name: 'Cinder Burrower', title: 'Armored Predator' },
+  caustic_ooze: { name: 'Caustic Ooze', title: 'Corroding Mass' },
+  lesser_ooze: { name: 'Lesser Ooze', title: 'Corrosive Spawn' },
+  ash_marauder: { name: 'Ash Marauder', title: 'Shadow Cutthroat' },
   bone_knight: { name: 'Bone Knight', title: 'Undead Sentinel' },
-  gremlin_nob: { name: 'Gremlin Nob', title: 'Elite · Enraged by Skills' },
-  lagavulin: { name: 'Lagavulin', title: 'Elite · Slumbering Shell' },
-  sentry: { name: 'Ancient Sentry', title: 'Elite · Arcane Trio' },
+  cinderhorn_brute: { name: 'Cinderhorn Brute', title: 'Elite · Enraged by Skills' },
+  slumbering_gargoyle: { name: 'Slumbering Gargoyle', title: 'Elite · Ironhide Shell' },
+  glyph_totem: { name: 'Glyph Totem', title: 'Elite · Arcane Trio' },
   obsidian_warden: { name: 'Obsidian Warden', title: 'Summit Colossus Boss' },
 };
 
@@ -445,7 +445,7 @@ export const EVENT_EN: Record<
     options: Record<string, { label: string; hint: string }>;
   }
 > = {
-  golden_idol: {
+  ember_shrine: {
     title: 'Ember Shrine',
     body: 'A molten gold idol rests inside an obsidian alcove, faint clockwork gears clicking beneath its pedestal. Snatch the treasure or offer blood at the shrine?',
     options: {
@@ -467,7 +467,7 @@ export const EVENT_EN: Record<
     title: 'Whispering Fountain',
     body: 'Silver springwater seeps through ancient stone, rippling with echoes of past climbs. Drinking may mend your body, or test your fortune.',
     options: {
-      drink_deep: { label: 'Drink Deeply', hint: 'Heal 22 HP and gain 1 random Rare card, but also the curse [Pain].' },
+      drink_deep: { label: 'Drink Deeply', hint: 'Heal 22 HP and gain 1 random Rare card, but also the curse [Marrow Ache].' },
       wash_blades: { label: 'Quench Weapons', hint: 'Gain +6 Max HP permanently.' },
       toss_coin: { label: 'Toss 60 Gold', hint: '50%: gain a Relic. Otherwise lose 6 HP and gain 85 Gold.' },
     },
@@ -477,7 +477,7 @@ export const EVENT_EN: Record<
     body: 'Ancient runes smolder across a basalt altar: "Trade flesh for forbidden might, and torment for relics."',
     options: {
       claim_relic: { label: 'Seal the Blood Pact', hint: 'Lose 12 HP and gain 1 powerful Relic.' },
-      claim_apotheosis: { label: 'Copy Apotheosis Scroll', hint: 'Lose 10 HP & 30 Gold. Gain Rare colorless [Apotheosis].' },
+      claim_epiphany: { label: 'Copy the Epiphany Scroll', hint: 'Lose 10 HP & 30 Gold. Gain Rare colorless [Molten Epiphany].' },
       walk_away: { label: 'Shatter the Runes', hint: 'Leave unscathed.' },
     },
   },
@@ -515,7 +515,7 @@ export function tIntentLabel(intent: EnemyIntent, locale: Locale): string {
   }
   if (intent.block) parts.push(`Block +${intent.block}`);
   if (intent.gainStrength) parts.push(`Strength +${intent.gainStrength}`);
-  if (intent.gainRitual) parts.push(`Ritual +${intent.gainRitual}`);
+  if (intent.gainZeal) parts.push(`Zeal +${intent.gainZeal}`);
   if (intent.grantsEnrage) parts.push('Enrage: your Skills give it +2 Strength');
   if (intent.applyVulnerable) parts.push(`Vulnerable ${intent.applyVulnerable}`);
   if (intent.applyWeak) parts.push(`Weak ${intent.applyWeak}`);
@@ -578,16 +578,16 @@ export function tCombatMsg(msg: CombatMsg, locale: Locale): string {
       return zh ? `力量 +${n}` : `Strength +${n}`;
     case 'gainDexterity':
       return zh ? `敏捷 +${n}` : `Dexterity +${n}`;
-    case 'gainMetallicize':
-      return zh ? `金属化 +${n}` : `Metallicize +${n}`;
+    case 'gainIronhide':
+      return zh ? `铁肤 +${n}` : `Ironhide +${n}`;
     case 'gainArtifact':
       return zh ? `人工制品 +${n}` : `Artifact +${n}`;
     case 'gainEnergy':
       return zh ? `+${n} 能量` : `+${n} Energy`;
-    case 'gainRitual':
-      return zh ? `仪式 +${n}` : `Ritual +${n}`;
-    case 'pain':
-      return zh ? `-${n} 痛楚` : `-${n} Pain`;
+    case 'gainZeal':
+      return zh ? `狂热 +${n}` : `Zeal +${n}`;
+    case 'curseAche':
+      return zh ? `-${n} 蚀骨痛楚` : `-${n} Marrow Ache`;
     case 'thorns':
       return zh ? `-${n} 荆棘` : `-${n} Thorns`;
     case 'burn':
@@ -610,21 +610,21 @@ export function tCombatMsg(msg: CombatMsg, locale: Locale): string {
       return zh ? `脆弱 +${n}` : `Frail +${n}`;
     case 'applyPoison':
       return zh ? `中毒 +${n}` : `Poison +${n}`;
-    case 'corpseMark':
-      return zh ? '尸爆标记' : 'Corpse Explosion';
-    case 'shuriken':
-      return zh ? `手里剑: 力量+${n}` : `Shuriken: Strength +${n}`;
-    case 'kunai':
-      return zh ? `苦无: 敏捷+${n}` : `Kunai: Dexterity +${n}`;
-    case 'orichalcum':
-      return zh ? `+${n} 奥利哈刚` : `+${n} Orichalcum`;
-    case 'hornCleat':
-      return zh ? `+${n} 羊角格挡` : `+${n} Horn Cleat Block`;
-    case 'phantasmal':
-      return zh ? '幻影绝杀: 伤害翻倍!' : 'Phantasmal: Double damage!';
-    case 'demonForm':
-      return zh ? `恶魔化身: 力量+${n}` : `Demon Form: Strength +${n}`;
-    case 'apotheosis':
+    case 'rotburstMark':
+      return zh ? '腐爆标记' : 'Rotburst';
+    case 'notchedBlade':
+      return zh ? `刻痕战刃: 力量+${n}` : `Notched Blade: Strength +${n}`;
+    case 'fleetRibbon':
+      return zh ? `疾风缎带: 敏捷+${n}` : `Fleet Ribbon: Dexterity +${n}`;
+    case 'cinderglassWard':
+      return zh ? `+${n} 熔琉璃格挡` : `+${n} Cinderglass Block`;
+    case 'watchmanHorn':
+      return zh ? `+${n} 号角格挡` : `+${n} Watchman's Horn Block`;
+    case 'nightTerror':
+      return zh ? '梦魇杀机: 伤害翻倍!' : 'Night Terror: Double damage!';
+    case 'infernalAvatar':
+      return zh ? `炼狱化身: 力量+${n}` : `Infernal Avatar: Strength +${n}`;
+    case 'upgradeAll':
       return zh ? '全牌升华 (+)' : 'All cards upgraded (+)';
     case 'bossPhase2':
       return zh ? '二阶段觉醒!' : 'Phase 2 awakens!';
@@ -638,10 +638,10 @@ export function tCombatMsg(msg: CombatMsg, locale: Locale): string {
     }
     case 'logEnterCombat':
       return zh ? `进入第 ${n} 层战斗` : `Entered combat on floor ${n}`;
-    case 'logMercury':
+    case 'logCinderHourglass':
       return zh
-        ? `水银沙漏：对所有敌人造成 ${n} 点伤害。`
-        : `Mercury Hourglass: dealt ${n} damage to all enemies.`;
+        ? `余烬沙漏：对所有敌人造成 ${n} 点伤害。`
+        : `Cinder Hourglass: dealt ${n} damage to all enemies.`;
     case 'logPlayCard': {
       const cardName = msg.ref ? tCard(msg.ref, locale).name : '';
       const plus = msg.upgraded ? '+' : '';

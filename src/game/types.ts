@@ -13,16 +13,16 @@ export interface StatusMap {
   frail: number;
   poison: number;
   thorns: number;
-  metallicize: number;
-  ritual: number;
-  barricade: boolean;
+  ironhide: number;
+  zeal: number;
+  bastion: boolean;
   artifact: number;
-  blur: number; // retain block for N turns
+  shade: number; // retain block for N turns
   doubleDamageNextTurn: boolean;
-  demonForm: number;
-  noxiousFumes: number;
-  envenom: number;
-  corpseExplosion: boolean;
+  infernalAvatar: number;
+  miasma: number;
+  venomEdge: number;
+  rotburst: boolean;
   noDrawThisTurn: boolean;
 }
 
@@ -61,32 +61,32 @@ export interface CardDef {
   upgradedGainStrength?: number;
   gainDexterity?: number;
   upgradedGainDexterity?: number;
-  gainMetallicize?: number;
-  upgradedGainMetallicize?: number;
+  gainIronhide?: number;
+  upgradedGainIronhide?: number;
   gainArtifact?: number;
   upgradedGainArtifact?: number;
-  gainBlur?: number;
-  addShivs?: number;
-  upgradedAddShivs?: number;
+  gainShade?: number;
+  addKnives?: number;
+  upgradedAddKnives?: number;
   discardCount?: number;
   blockAsDamage?: boolean;
   lifesteal?: boolean;
-  apotheosis?: boolean;
+  upgradeAllInCombat?: boolean;
   doubleNextTurn?: boolean;
-  corpseExplosion?: boolean;
-  demonForm?: number;
-  upgradedDemonForm?: number;
-  noxiousFumes?: number;
-  upgradedNoxiousFumes?: number;
-  envenom?: number;
-  barricade?: boolean;
+  rotburst?: boolean;
+  infernalAvatar?: number;
+  upgradedInfernalAvatar?: number;
+  miasma?: number;
+  upgradedMiasma?: number;
+  venomEdge?: number;
+  bastion?: boolean;
   noMoreDraw?: boolean;
   exhaust?: boolean;
   upgradedExhaust?: boolean;
   ethereal?: boolean;
   innate?: boolean;
   endTurnBurn?: number;
-  painCurse?: boolean;
+  achingCurse?: boolean;
   description: string;
   upgradedDescription?: string;
   artKey: string;
@@ -116,8 +116,8 @@ export interface EnemyIntent {
   applyWeak?: number;
   applyFrail?: number;
   gainStrength?: number;
-  gainRitual?: number;
-  gainMetallicize?: number;
+  gainZeal?: number;
+  gainIronhide?: number;
   gainThorns?: number;
   addStatusCardId?: string;
   addStatusCount?: number;
@@ -127,14 +127,14 @@ export interface EnemyIntent {
 }
 
 export type EnemyArtType =
-  | 'cultist'
-  | 'slime'
-  | 'jawworm'
-  | 'looter'
+  | 'ember_zealot'
+  | 'caustic_ooze'
+  | 'cinder_burrower'
+  | 'ash_marauder'
   | 'boneknight'
-  | 'nob'
-  | 'lagavulin'
-  | 'sentry'
+  | 'cinderhorn_brute'
+  | 'slumbering_gargoyle'
+  | 'glyph_totem'
   | 'boss_warden';
 
 export interface EnemyInstance {
@@ -152,7 +152,7 @@ export interface EnemyInstance {
   turnCount: number;
   artType: EnemyArtType;
   asleep?: boolean;
-  enraged?: boolean; // Nob gains strength when player plays skills
+  enraged?: boolean; // Cinderhorn Brute gains strength when player plays skills
   splitTriggered?: boolean;
   bossPhase2Triggered?: boolean;
 }
@@ -200,11 +200,11 @@ export type CombatMsgKey =
   | 'gainBlock'
   | 'gainStrength'
   | 'gainDexterity'
-  | 'gainMetallicize'
+  | 'gainIronhide'
   | 'gainArtifact'
   | 'gainEnergy'
-  | 'gainRitual'
-  | 'pain'
+  | 'gainZeal'
+  | 'curseAche'
   | 'thorns'
   | 'burn'
   | 'poisonTick'
@@ -216,19 +216,19 @@ export type CombatMsgKey =
   | 'applyWeak'
   | 'applyFrail'
   | 'applyPoison'
-  | 'corpseMark'
-  | 'shuriken'
-  | 'kunai'
-  | 'orichalcum'
-  | 'hornCleat'
-  | 'phantasmal'
-  | 'demonForm'
-  | 'apotheosis'
+  | 'rotburstMark'
+  | 'notchedBlade'
+  | 'fleetRibbon'
+  | 'cinderglassWard'
+  | 'watchmanHorn'
+  | 'nightTerror'
+  | 'infernalAvatar'
+  | 'upgradeAll'
   | 'bossPhase2'
   | 'statusCards'
   | 'statusCardsDraw'
   | 'logEnterCombat'
-  | 'logMercury'
+  | 'logCinderHourglass'
   | 'logPlayCard'
   | 'logUsePotion'
   | 'logBossPhase2';

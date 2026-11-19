@@ -70,55 +70,55 @@ function testMapInvariants() {
 }
 
 function testCombatMechanicsAndStats() {
-  // 1. Ironwarden Body Slam + Bash Vulnerable + Heavy Blade + Whirlwind + Stats
+  // 1. Ironwarden Shield Ram + Armor Breaker Vulnerable + Crushing Maul + Blade Cyclone + Stats
   let run = createNewRun('ironwarden', 2);
-  run.relics.push(RELIC_DEFS.vajra, RELIC_DEFS.shuriken, RELIC_DEFS.orichalcum);
+  run.relics.push(RELIC_DEFS.ashen_fang, RELIC_DEFS.notched_blade, RELIC_DEFS.cinderglass_ward);
   run = startCombat(run, 'boss', 15);
   assert.ok(run.combat, 'Combat should initialize');
   const boss = run.combat.enemies[0];
   assert.equal(boss.maxHp, Math.round(220 * 1.2), 'Ascension 2 boss HP should scale +20%');
   assert.equal(boss.statuses.strength, 1, 'Ascension 2 boss starts with +1 strength');
 
-  const bash = createCardInstance('bash', true);
-  const heavy = createCardInstance('heavy_blade', true);
+  const breaker = createCardInstance('armor_breaker', true);
+  const maul = createCardInstance('crushing_maul', true);
   const defend = createCardInstance('iron_defend', true);
-  const slam = createCardInstance('body_slam', true);
-  const whirl = createCardInstance('whirlwind', true);
-  run.combat.hand = [bash, defend, slam, heavy, whirl];
+  const ram = createCardInstance('shield_ram', true);
+  const cyclone = createCardInstance('blade_cyclone', true);
+  run.combat.hand = [breaker, defend, ram, maul, cyclone];
   run.combat.energy = 6;
 
-  // Play Bash+ (10 dmg + 3 vuln)
-  let res = playCard(run, bash.uid, boss.uid);
+  // Play Armor Breaker+ (10 dmg + 3 vuln)
+  let res = playCard(run, breaker.uid, boss.uid);
   run = res.state;
   assert.equal(run.combat!.enemies[0].statuses.artifact, 1, 'Boss artifact absorbs 1st debuff');
 
-  // Play Defend+ (9 block), Body Slam+ (9 + 1 str = 10 dmg)
+  // Play Defend+ (9 block), Shield Ram+ (9 + 1 str = 10 dmg)
   res = playCard(run, defend.uid);
   run = res.state;
   assert.equal(run.combat!.playerBlock, 9);
   assert.ok(run.stats.blockGained >= 9, 'Stats must track blockGained');
 
-  const slamPreview = calculateCardDamagePreview(slam, run, run.combat!.enemies[0]);
-  assert.equal(slamPreview.perHit, 10, 'Body Slam should deal block(9) + str(1) = 10');
-  res = playCard(run, slam.uid, boss.uid);
+  const ramPreview = calculateCardDamagePreview(ram, run, run.combat!.enemies[0]);
+  assert.equal(ramPreview.perHit, 10, 'Shield Ram should deal block(9) + str(1) = 10');
+  res = playCard(run, ram.uid, boss.uid);
   run = res.state;
 
-  // Play Heavy Blade+ (14 + 5*1 str = 19)
-  const heavyPreview = calculateCardDamagePreview(heavy, run, run.combat!.enemies[0]);
-  assert.equal(heavyPreview.perHit, 19);
-  res = playCard(run, heavy.uid, boss.uid);
+  // Play Crushing Maul+ (14 + 5*1 str = 19)
+  const maulPreview = calculateCardDamagePreview(maul, run, run.combat!.enemies[0]);
+  assert.equal(maulPreview.perHit, 19);
+  res = playCard(run, maul.uid, boss.uid);
   run = res.state;
-  assert.equal(run.combat!.playerStatuses.strength, 2, '3rd attack triggers Shuriken');
+  assert.equal(run.combat!.playerStatuses.strength, 2, '3rd attack triggers Notched Blade');
 
-  // Verify card damage stats recorded (Bash+ 10 + 1 Vajra Str = 11, Body Slam = 10, Heavy Blade+ = 19)
+  // Verify card damage stats recorded (Armor Breaker+ 10 + 1 Ashen Fang Str = 11, Shield Ram = 10, Crushing Maul+ = 19)
   assert.equal(run.stats.cardsByType.attack, 3);
   assert.equal(run.stats.cardsByType.skill, 1);
-  assert.equal(run.stats.damageByCard.heavy_blade.damage, 19);
-  assert.equal(run.stats.damageByCard.bash.damage, 11);
+  assert.equal(run.stats.damageByCard.crushing_maul.damage, 19);
+  assert.equal(run.stats.damageByCard.armor_breaker.damage, 11);
   assert.equal(run.stats.attackDamageDealt, 11 + 10 + 19);
 
-  // Play Whirlwind+ (X=1 energy left -> 8 + 2 = 10 dmg)
-  res = playCard(run, whirl.uid);
+  // Play Blade Cyclone+ (X=1 energy left -> 8 + 2 = 10 dmg)
+  res = playCard(run, cyclone.uid);
   run = res.state;
   assert.equal(run.combat!.energy, 0);
   assert.equal(run.stats.attackDamageDealt, 11 + 10 + 19 + 10);
@@ -128,9 +128,9 @@ function testCombatMechanicsAndStats() {
   run = res.state;
   assert.equal(run.combat!.turn, 2);
   assert.ok(run.stats.damageBlocked + run.stats.hpLost > 0, 'Enemy turn stats must update');
-  console.log('✓ Ironwarden combat, Artifact, Body Slam, Heavy Blade, Shuriken, Whirlwind & Stats passed');
+  console.log('✓ Ironwarden combat, Artifact, Shield Ram, Crushing Maul, Notched Blade, Blade Cyclone & Stats passed');
 
-  // 2. Shadowweaver Poison + Catalyst + Corpse Explosion + Survivor discard + combatHistory
+  // 2. Shadowweaver Poison + Toxic Bloom + Rotburst + Last Refuge discard + combatHistory
   let sw = createNewRun('shadowweaver', 0);
   const f1 = sw.map.find((n) => n.floor === 1)!;
   sw = enterMapNode(sw, f1.id);
@@ -146,7 +146,7 @@ function testCombatMechanicsAndStats() {
       statuses: { ...sw.combat!.enemies[0].statuses, artifact: 0 },
     });
   }
-  // Exactly two enemies (the Sentry elite now spawns three).
+  // Exactly two enemies (the Glyph Totem elite spawns three).
   sw.combat!.enemies = sw.combat!.enemies.slice(0, 2);
   sw.combat!.enemies[0].statuses.artifact = 0;
   sw.combat!.enemies[0].hp = 5;
@@ -154,48 +154,48 @@ function testCombatMechanicsAndStats() {
   sw.combat!.enemies[0].block = 0;
   sw.combat!.enemies[1].hp = 30;
   sw.combat!.enemies[1].maxHp = 30;
-  // A cloned sleeping Lagavulin would inherit its 8 starting block and make
-  // this check fail whenever the random elite roll is Lagavulin.
+  // A cloned Slumbering Gargoyle would inherit its 8 starting block and make
+  // this check fail whenever the random elite roll is the Gargoyle.
   sw.combat!.enemies[1].block = 0;
 
-  const ce = createCardInstance('corpse_explosion', false);
-  const cat = createCardInstance('catalyst', true);
-  const surv = createCardInstance('survivor', false);
+  const rot = createCardInstance('rotburst', false);
+  const bloom = createCardInstance('toxic_bloom', true);
+  const refuge = createCardInstance('last_refuge', false);
   const strike = createCardInstance('shadow_strike', false);
-  sw.combat!.hand = [ce, cat, surv, strike];
+  sw.combat!.hand = [rot, bloom, refuge, strike];
   sw.combat!.energy = 4;
 
-  let swRes = playCard(sw, surv.uid);
+  let swRes = playCard(sw, refuge.uid);
   sw = swRes.state;
-  assert.ok(sw.combat!.pendingDiscard, 'Survivor must trigger pendingDiscard');
+  assert.ok(sw.combat!.pendingDiscard, 'Last Refuge must trigger pendingDiscard');
   sw = discardSelectedCard(sw, strike.uid);
   assert.equal(sw.combat!.pendingDiscard, undefined, 'Discarding clears pendingDiscard');
 
-  swRes = playCard(sw, ce.uid, sw.combat!.enemies[0].uid);
+  swRes = playCard(sw, rot.uid, sw.combat!.enemies[0].uid);
   sw = swRes.state;
   assert.equal(sw.combat!.enemies[0].statuses.poison, 6);
-  assert.equal(sw.combat!.enemies[0].statuses.corpseExplosion, true);
+  assert.equal(sw.combat!.enemies[0].statuses.rotburst, true);
 
   swRes = resolveEnemyTurn(sw);
   sw = swRes.state;
-  assert.equal(sw.phase, 'REWARD', 'Corpse Explosion kills enemy 1 -> transitions to REWARD');
+  assert.equal(sw.phase, 'REWARD', 'Rotburst kills enemy 1 -> transitions to REWARD');
   // 5 poison (enemy 1 had 5 HP) + 30 explosion (capped at enemy 2's 30 HP; no overkill)
-  assert.equal(sw.stats.poisonDamageDealt, 35, 'Poison + Corpse Explosion damage must be recorded without overkill');
+  assert.equal(sw.stats.poisonDamageDealt, 35, 'Poison + Rotburst damage must be recorded without overkill');
   assert.ok(sw.stats.combatHistory.length >= 1, 'Combat victory must append combatHistory entry');
-  console.log('✓ Shadowweaver Poison, Survivor, Corpse Explosion & combatHistory passed');
+  console.log('✓ Shadowweaver Poison, Last Refuge, Rotburst & combatHistory passed');
 
   // 3. Potion slot management
   let pots: (typeof POTION_DEFS[keyof typeof POTION_DEFS] | null)[] = [
-    POTION_DEFS.fire_potion,
-    POTION_DEFS.block_potion,
-    POTION_DEFS.energy_potion,
+    POTION_DEFS.wildfire_flask,
+    POTION_DEFS.stoneskin_tonic,
+    POTION_DEFS.kindling_elixir,
   ];
-  const fullTry = addPotionToSlot(pots, POTION_DEFS.heal_potion);
+  const fullTry = addPotionToSlot(pots, POTION_DEFS.heartblood_elixir);
   assert.equal(fullTry.added, false);
   pots = discardPotionSlot(pots, 1);
-  const afterDiscard = addPotionToSlot(pots, POTION_DEFS.heal_potion);
+  const afterDiscard = addPotionToSlot(pots, POTION_DEFS.heartblood_elixir);
   assert.equal(afterDiscard.added, true);
-  assert.equal(afterDiscard.potions[1]?.id, 'heal_potion');
+  assert.equal(afterDiscard.potions[1]?.id, 'heartblood_elixir');
   console.log('✓ Potion slot add/discard passed');
 
   // 4. Block preview under Frail
@@ -257,21 +257,21 @@ function testBilingualCoverage() {
 }
 
 function testP0Regressions() {
-  // 1. Battle Trance draws its cards, then locks further draws this turn
+  // 1. Tunnel Vision draws its cards, then locks further draws this turn
   let bt = createNewRun('ironwarden', 0);
   bt = startCombat(bt, 'monster', 1);
-  const trance = createCardInstance('battle_trance', false);
-  const pommel = createCardInstance('pommel_strike', false);
-  bt.combat!.hand = [trance, pommel];
+  const vision = createCardInstance('tunnel_vision', false);
+  const jab = createCardInstance('hilt_jab', false);
+  bt.combat!.hand = [vision, jab];
   bt.combat!.drawPile = Array.from({ length: 8 }, () => createCardInstance('iron_strike'));
   bt.combat!.discardPile = [];
   bt.combat!.energy = 3;
-  bt = playCard(bt, trance.uid).state;
-  assert.equal(bt.combat!.hand.length, 4, 'Battle Trance must draw 3 cards');
+  bt = playCard(bt, vision.uid).state;
+  assert.equal(bt.combat!.hand.length, 4, 'Tunnel Vision must draw 3 cards');
   assert.equal(bt.combat!.playerStatuses.noDrawThisTurn, true);
-  bt = playCard(bt, pommel.uid, bt.combat!.enemies[0].uid).state;
-  assert.equal(bt.combat!.hand.length, 3, 'No further draws after Battle Trance');
-  console.log('✓ Battle Trance draw order passed');
+  bt = playCard(bt, jab.uid, bt.combat!.enemies[0].uid).state;
+  assert.equal(bt.combat!.hand.length, 3, 'No further draws after Tunnel Vision');
+  console.log('✓ Tunnel Vision draw order passed');
 
   // 2. A 1-stack Vulnerable applied by an enemy must survive to its next attack
   let vr = createNewRun('ironwarden', 0);
@@ -286,7 +286,7 @@ function testP0Regressions() {
       block: 0,
       asleep: false,
       turnCount: 3,
-      statuses: { ...base.statuses, strength: 0, thorns: 0, metallicize: 0, ritual: 0, weak: 0 },
+      statuses: { ...base.statuses, strength: 0, thorns: 0, ironhide: 0, zeal: 0, weak: 0 },
       intent: { type: 'debuff', applyFrail: 2, applyVulnerable: 1, label: 'test' },
     },
   ];
@@ -341,11 +341,11 @@ function testP0Regressions() {
     gainBlock: { n: 5 },
     gainStrength: { n: 2 },
     gainDexterity: { n: 1 },
-    gainMetallicize: { n: 3 },
+    gainIronhide: { n: 3 },
     gainArtifact: { n: 1 },
     gainEnergy: { n: 2 },
-    gainRitual: { n: 3 },
-    pain: { n: 1 },
+    gainZeal: { n: 3 },
+    curseAche: { n: 1 },
     thorns: { n: 2 },
     burn: { n: 4 },
     poisonTick: { n: 6 },
@@ -357,21 +357,21 @@ function testP0Regressions() {
     applyWeak: { n: 1 },
     applyFrail: { n: 2 },
     applyPoison: { n: 5 },
-    corpseMark: {},
-    shuriken: { n: 1 },
-    kunai: { n: 1 },
-    orichalcum: { n: 6 },
-    hornCleat: { n: 14 },
-    phantasmal: {},
-    demonForm: { n: 2 },
-    apotheosis: {},
+    rotburstMark: {},
+    notchedBlade: { n: 1 },
+    fleetRibbon: { n: 1 },
+    cinderglassWard: { n: 6 },
+    watchmanHorn: { n: 14 },
+    nightTerror: {},
+    infernalAvatar: { n: 2 },
+    upgradeAll: {},
     bossPhase2: {},
     statusCards: { n: 2, ref: 'wound' },
     statusCardsDraw: { n: 2, ref: 'wound' },
     logEnterCombat: { n: 3 },
-    logMercury: { n: 3 },
-    logPlayCard: { ref: 'bash', upgraded: true },
-    logUsePotion: { ref: 'fire_potion' },
+    logCinderHourglass: { n: 3 },
+    logPlayCard: { ref: 'armor_breaker', upgraded: true },
+    logUsePotion: { ref: 'wildfire_flask' },
     logBossPhase2: { ref: 'obsidian_warden', name: '黑曜守望者' },
   } satisfies Record<CombatMsgKey, Omit<CombatMsg, 'key'>>;
   const cjk = /[一-鿿]/;

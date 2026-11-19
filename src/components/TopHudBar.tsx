@@ -18,7 +18,7 @@ import { HERO_EN, Locale, UI_COPY, tPotion, tRelic } from '../game/i18n';
 import { TOTAL_FLOORS } from '../game/map';
 import { PotionDef, RelicDef, RunState } from '../game/types';
 
-// One CJK character ("燃血徽记" -> "燃") or up to two initials ("Burning Blood" -> "BB").
+// One CJK character ("血焰徽记" -> "血") or up to two initials ("Bloodfire Sigil" -> "BS").
 function relicGlyph(name: string): string {
   const trimmed = name.trim();
   if (/^[一-鿿]/.test(trimmed)) return trimmed[0];
@@ -109,7 +109,7 @@ export const TopHudBar: React.FC<TopHudBarProps> = ({
               const potTxt = pot ? tPotion(pot.id, locale) : null;
               const usableNow =
                 pot &&
-                (pot.id === 'heal_potion' ||
+                (pot.id === 'heartblood_elixir' ||
                   (state.phase === 'COMBAT' && !state.combat?.enemyTurnInProgress));
               return (
                 <div key={idx} className="group relative">

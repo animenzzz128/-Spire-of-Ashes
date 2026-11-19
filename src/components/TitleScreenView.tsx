@@ -20,6 +20,7 @@ import {
 import { HERO_CLASSES } from '../game/heroes';
 import { HERO_EN, Locale, UI_COPY, tHeroSubtitle, tRelic } from '../game/i18n';
 import { HeroClassId, RunState } from '../game/types';
+import { assetUrl } from '../game/assets';
 
 interface TitleScreenViewProps {
   locale: Locale;
@@ -139,7 +140,7 @@ export const TitleScreenView: React.FC<TitleScreenViewProps> = ({
       <div className="pointer-events-none absolute inset-0 z-0">
         {!imgFailed.keyart && (
           <img
-            src="/src/assets/images/spire_title_keyart_1795024272474.jpg"
+            src={assetUrl('src/assets/images/spire_title_keyart_1795024272474.jpg')}
             alt={copy.brandTitle}
             referrerPolicy="no-referrer"
             onError={() => setImgFailed((p) => ({ ...p, keyart: true }))}

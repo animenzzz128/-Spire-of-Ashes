@@ -36,7 +36,7 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
   const incomingAtk = 11;
   const drill2NetLoss = Math.max(0, incomingAtk - drill2Block);
 
-  // Interactive Step 3 state: Bash + Strike Vulnerable combo
+  // Interactive Step 3 state: Armor Breaker + Strike Vulnerable combo
   const [drill3Energy, setDrill3Energy] = useState(3);
   const [drill3EnemyHp, setDrill3EnemyHp] = useState(17);
   const [drill3Vulnerable, setDrill3Vulnerable] = useState(0);
@@ -204,8 +204,8 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
       title: zh ? '第三步：易伤破防与斩杀连击（可交互）' : 'Step 3: Vulnerable & Lethal Combo (Interactive)',
       badge: zh ? '伤害计算 3/5' : 'Combos 3/5',
       summary: zh
-        ? '先用“重击”施加易伤（攻击伤害提高 50%），再打打击即可刚好斩杀 17 血的敌人！'
-        : 'Apply Vulnerable (+50% damage taken) with Bash first, then follow up with Iron Strike to defeat a 17 HP foe!',
+        ? '先用“破甲重击”施加易伤（攻击伤害提高 50%），再打打击即可刚好斩杀 17 血的敌人！'
+        : 'Apply Vulnerable (+50% damage taken) with Armor Breaker first, then follow up with Iron Strike to defeat a 17 HP foe!',
       render: () => (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/10 bg-[#0d1118] p-4">
@@ -215,7 +215,7 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
                 <span>{drill3Energy}/3</span>
               </div>
               <div className="text-xs text-slate-300">
-                {zh ? '建议出牌顺序：重击 (2费) → 打击 (1费)' : 'Combo order: Bash (2) → Strike (1)'}
+                {zh ? '建议出牌顺序：破甲重击 (2费) → 打击 (1费)' : 'Combo order: Armor Breaker (2) → Strike (1)'}
               </div>
             </div>
 
@@ -251,7 +251,7 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
             >
               <div className="flex items-center justify-between">
                 <span className="text-sm font-bold text-slate-100">
-                  {zh ? '重击' : 'Bash'}
+                  {zh ? '破甲重击' : 'Armor Breaker'}
                 </span>
                 <span className="rounded bg-amber-500 px-1.5 py-0.5 font-mono-num text-xs font-bold text-slate-950">
                   2

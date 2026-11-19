@@ -52,7 +52,9 @@ import {
   RunState,
 } from './game/types';
 
-const ACTIVE_RUN_STORAGE_KEY = 'spire_ashes_active_run_v1';
+// v2: card, relic, potion and enemy ids were renamed, so a v1 save cannot be
+// resumed safely. It is simply ignored (the run starts fresh).
+const ACTIVE_RUN_STORAGE_KEY = 'spire_ashes_active_run_v2';
 const LOCALE_STORAGE_KEY = 'spire_ashes_locale_v1';
 
 export default function App() {
@@ -452,7 +454,7 @@ export default function App() {
     }
     const res = usePotion(runState, slotIndex);
     sound.potion();
-    spawnVfx([{ targetUid: 'player', type: pot.id === 'block_potion' ? 'shield' : 'power' }]);
+    spawnVfx([{ targetUid: 'player', type: pot.id === 'stoneskin_tonic' ? 'shield' : 'power' }]);
     pushCombatFeedback(res.events);
     setRunState(res.state);
   };
@@ -464,8 +466,8 @@ export default function App() {
     sound.potion();
     setPendingPotionSlot(null);
     spawnVfx(
-      [{ targetUid: enemyUid, type: pot?.id === 'poison_potion' ? 'poison' : 'slash_heavy' }],
-      pot?.id !== 'poison_potion'
+      [{ targetUid: enemyUid, type: pot?.id === 'nightshade_vial' ? 'poison' : 'slash_heavy' }],
+      pot?.id !== 'nightshade_vial'
     );
     pushCombatFeedback(res.events, res.hitPlayer, [enemyUid]);
     setRunState(res.state);
