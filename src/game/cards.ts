@@ -1,4 +1,5 @@
-import { CardDef, CardInstance, HeroClassId } from './types';
+import { rng } from './rng';
+import { CardDef, CardEffect, CardInstance, HeroClassId } from './types';
 
 export const CARD_DEFS: Record<string, CardDef> = {
   // === IRONWARDEN STARTERS & POOL ===
@@ -336,6 +337,92 @@ export const CARD_DEFS: Record<string, CardDef> = {
     artKey: 'scythe',
   },
 
+  // --- Ironwarden: Ember cards (P2.1) ---
+  kindling_chop: {
+    id: 'kindling_chop',
+    name: '添柴劈',
+    pool: 'ironwarden',
+    type: 'attack',
+    rarity: 'common',
+    target: 'enemy',
+    cost: 1,
+    effects: [{ op: 'damage', n: 7, up: 10 }, { op: 'gainEmber', n: 1 }],
+    description: '造成 7 点伤害。获得 1 点余烬。',
+    upgradedDescription: '造成 10 点伤害。获得 1 点余烬。',
+    artKey: 'chop',
+  },
+  anvil_guard: {
+    id: 'anvil_guard',
+    name: '铁砧护体',
+    pool: 'ironwarden',
+    type: 'skill',
+    rarity: 'common',
+    target: 'self',
+    cost: 1,
+    effects: [{ op: 'block', n: 6, up: 9 }, { op: 'gainEmber', n: 1 }],
+    description: '获得 6 点格挡。获得 1 点余烬。',
+    upgradedDescription: '获得 9 点格挡。获得 1 点余烬。',
+    artKey: 'shield',
+  },
+  spark_spray: {
+    id: 'spark_spray',
+    name: '火星四溅',
+    pool: 'ironwarden',
+    type: 'attack',
+    rarity: 'common',
+    target: 'all_enemies',
+    cost: 1,
+    effects: [
+      { op: 'damage', n: 4, up: 6 },
+      { op: 'gainEmber', n: 1, perEnemyHit: true, max: 2 },
+    ],
+    description: '对所有敌人造成 4 点伤害。每命中 1 个敌人获得 1 点余烬（最多 2 点）。',
+    upgradedDescription: '对所有敌人造成 6 点伤害。每命中 1 个敌人获得 1 点余烬（最多 2 点）。',
+    artKey: 'broad_arc',
+  },
+  aftershock: {
+    id: 'aftershock',
+    name: '余震',
+    pool: 'ironwarden',
+    type: 'attack',
+    rarity: 'common',
+    target: 'enemy',
+    cost: 1,
+    effects: [
+      { op: 'damage', n: 5, up: 7 },
+      { op: 'damage', n: 5, up: 7, when: { temperedThisTurn: true } },
+    ],
+    description: '造成 5 点伤害。本回合用过淬火时，改为攻击 2 次。',
+    upgradedDescription: '造成 7 点伤害。本回合用过淬火时，改为攻击 2 次。',
+    artKey: 'hammer',
+  },
+  molten_edge: {
+    id: 'molten_edge',
+    name: '熔锋斩',
+    pool: 'ironwarden',
+    type: 'attack',
+    rarity: 'uncommon',
+    target: 'enemy',
+    cost: 2,
+    effects: [{ op: 'damage', n: 6, perEmber: 3, upPerEmber: 4 }],
+    description: '造成 6 点伤害，你每有 1 点余烬再加 3 点（不消耗余烬）。',
+    upgradedDescription: '造成 6 点伤害，你每有 1 点余烬再加 4 点（不消耗余烬）。',
+    artKey: 'heavy',
+  },
+  forge_heart: {
+    id: 'forge_heart',
+    name: '锻炉之心',
+    pool: 'ironwarden',
+    type: 'power',
+    rarity: 'uncommon',
+    target: 'self',
+    cost: 1,
+    effects: [{ op: 'buff', status: 'forgeHeart', n: 4, up: 6 }],
+    description: '每次添薪时，获得 4 点格挡。',
+    upgradedDescription: '每次添薪时，获得 6 点格挡。',
+    artKey: 'armor',
+  },
+
   // === SHADOWWEAVER STARTERS & POOL ===
   shadow_strike: {
     id: 'shadow_strike',
@@ -654,6 +741,92 @@ export const CARD_DEFS: Record<string, CardDef> = {
     artKey: 'rot',
   },
 
+  // --- Shadowweaver: Ember & Echo cards (P2.1) ---
+  ash_dart: {
+    id: 'ash_dart',
+    name: '灰烬镖',
+    pool: 'shadowweaver',
+    type: 'attack',
+    rarity: 'common',
+    target: 'enemy',
+    cost: 0,
+    effects: [{ op: 'damage', n: 3, up: 5 }],
+    echo: [{ op: 'gainEmber', n: 1 }],
+    description: '造成 3 点伤害。余响：获得 1 点余烬。',
+    upgradedDescription: '造成 5 点伤害。余响：获得 1 点余烬。',
+    artKey: 'knife',
+  },
+  smoke_step: {
+    id: 'smoke_step',
+    name: '烟遁',
+    pool: 'shadowweaver',
+    type: 'skill',
+    rarity: 'common',
+    target: 'self',
+    cost: 1,
+    effects: [{ op: 'block', n: 6, up: 9 }, { op: 'discard', n: 1 }],
+    description: '获得 6 点格挡。丢弃 1 张手牌。',
+    upgradedDescription: '获得 9 点格挡。丢弃 1 张手牌。',
+    artKey: 'cloak',
+  },
+  venom_cinders: {
+    id: 'venom_cinders',
+    name: '毒烬',
+    pool: 'shadowweaver',
+    type: 'skill',
+    rarity: 'common',
+    target: 'all_enemies',
+    cost: 1,
+    effects: [{ op: 'debuff', status: 'poison', n: 3, up: 4 }],
+    description: '给予所有敌人 3 层中毒。',
+    upgradedDescription: '给予所有敌人 4 层中毒。',
+    artKey: 'miasma',
+  },
+  echo_blade: {
+    id: 'echo_blade',
+    name: '回响之刃',
+    pool: 'shadowweaver',
+    type: 'attack',
+    rarity: 'uncommon',
+    target: 'enemy',
+    cost: 1,
+    effects: [{ op: 'damage', n: 8, up: 11 }],
+    echo: [{ op: 'addCard', card: 'throwing_knife', n: 1 }],
+    description: '造成 8 点伤害。余响：将 1 张【飞刀】置入手牌。',
+    upgradedDescription: '造成 11 点伤害。余响：将 1 张【飞刀】置入手牌。',
+    artKey: 'dagger',
+  },
+  blade_rain: {
+    id: 'blade_rain',
+    name: '刃雨',
+    pool: 'shadowweaver',
+    type: 'skill',
+    rarity: 'uncommon',
+    target: 'self',
+    cost: 1,
+    effects: [
+      { op: 'spendEmber', n: 5 },
+      { op: 'addCard', card: 'throwing_knife', n: 5, perSpent: true, upgradedCopies: true },
+    ],
+    description: '花费至多 5 点余烬，每花 1 点将 1 张【飞刀】置入手牌。',
+    upgradedDescription: '花费至多 5 点余烬，每花 1 点将 1 张升级的【飞刀】置入手牌。',
+    artKey: 'blades',
+  },
+  smoldering_haze: {
+    id: 'smoldering_haze',
+    name: '余烬烟霭',
+    pool: 'shadowweaver',
+    type: 'power',
+    rarity: 'uncommon',
+    target: 'self',
+    cost: 1,
+    upgradedCost: 0,
+    effects: [{ op: 'buff', status: 'smolderingHaze', n: 1 }],
+    description: '每当你花费余烬，给予所有敌人等量的中毒。',
+    upgradedDescription: '每当你花费余烬，给予所有敌人等量的中毒。',
+    artKey: 'miasma',
+  },
+
   // === SPECIAL / NEUTRAL / STATUS / CURSE ===
   throwing_knife: {
     id: 'throwing_knife',
@@ -809,7 +982,7 @@ export function getStarterDeck(heroId: HeroClassId): CardInstance[] {
       createCardInstance('iron_strike'),
       createCardInstance('iron_strike'),
       createCardInstance('iron_strike'),
-      createCardInstance('iron_strike'),
+      createCardInstance('kindling_chop'), // shows Ember from the first fight
       createCardInstance('iron_defend'),
       createCardInstance('iron_defend'),
       createCardInstance('iron_defend'),
@@ -822,7 +995,7 @@ export function getStarterDeck(heroId: HeroClassId): CardInstance[] {
     createCardInstance('shadow_strike'),
     createCardInstance('shadow_strike'),
     createCardInstance('shadow_strike'),
-    createCardInstance('shadow_strike'),
+    createCardInstance('ash_dart'), // gives Last Refuge's discard a payoff
     createCardInstance('shadow_defend'),
     createCardInstance('shadow_defend'),
     createCardInstance('shadow_defend'),
@@ -864,7 +1037,7 @@ export function rollCardChoices(
 
   while (result.length < count && guard < 100) {
     guard += 1;
-    const roll = Math.random();
+    const roll = rng();
     let targetRarity: 'common' | 'uncommon' | 'rare' = 'common';
     if (roll < rareChance) {
       targetRarity = 'rare';
@@ -875,11 +1048,93 @@ export function rollCardChoices(
     const fallback = pool.filter((c) => !pickedIds.has(c.id));
     const list = candidates.length > 0 ? candidates : fallback;
     if (list.length === 0) break;
-    const chosen = list[Math.floor(Math.random() * list.length)];
+    const chosen = list[Math.floor(rng() * list.length)];
     pickedIds.add(chosen.id);
     // Small chance of a pre-upgraded card
-    const preUpgraded = Math.random() < (eliteBonus ? 0.12 : 0.05);
+    const preUpgraded = rng() < (eliteBonus ? 0.12 : 0.05);
     result.push(createCardInstance(chosen.id, preUpgraded));
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Effect lists
+// ---------------------------------------------------------------------------
+
+/** Amount of an effect for a base or upgraded card. */
+export function effVal(e: { n: number; up?: number }, upgraded: boolean): number {
+  return upgraded && e.up !== undefined ? e.up : e.n;
+}
+
+// Cards written before effect lists use flat fields. Compile them into the
+// equivalent effect list, in the order the old hand-written resolver used, so
+// every card runs through the same interpreter.
+function compileLegacyEffects(def: CardDef): CardEffect[] {
+  const fx: CardEffect[] = [];
+  const pair = (n: number | undefined, up: number | undefined) =>
+    up !== undefined ? { n: n || 0, up } : { n: n || 0 };
+  const has = (n: number | undefined, up: number | undefined) => (n || 0) > 0 || (up || 0) > 0;
+
+  if (def.loseHp) fx.push({ op: 'loseHp', n: def.loseHp });
+  if (has(def.gainEnergy, def.upgradedGainEnergy)) fx.push({ op: 'gainEnergy', ...pair(def.gainEnergy, def.upgradedGainEnergy) });
+  if (has(def.block, def.upgradedBlock)) fx.push({ op: 'block', ...pair(def.block, def.upgradedBlock) });
+  if (has(def.gainStrength, def.upgradedGainStrength)) fx.push({ op: 'buff', status: 'strength', ...pair(def.gainStrength, def.upgradedGainStrength) });
+  if (has(def.gainDexterity, def.upgradedGainDexterity)) fx.push({ op: 'buff', status: 'dexterity', ...pair(def.gainDexterity, def.upgradedGainDexterity) });
+  if (has(def.gainIronhide, def.upgradedGainIronhide)) fx.push({ op: 'buff', status: 'ironhide', ...pair(def.gainIronhide, def.upgradedGainIronhide) });
+  if (has(def.gainArtifact, def.upgradedGainArtifact)) fx.push({ op: 'buff', status: 'artifact', ...pair(def.gainArtifact, def.upgradedGainArtifact) });
+  if (def.gainShade) fx.push({ op: 'buff', status: 'shade', n: def.gainShade });
+  if (def.bastion) fx.push({ op: 'flag', flag: 'bastion' });
+  if (def.doubleNextTurn) fx.push({ op: 'flag', flag: 'doubleDamageNextTurn' });
+  if (has(def.infernalAvatar, def.upgradedInfernalAvatar)) fx.push({ op: 'buff', status: 'infernalAvatar', ...pair(def.infernalAvatar, def.upgradedInfernalAvatar) });
+  if (has(def.miasma, def.upgradedMiasma)) fx.push({ op: 'buff', status: 'miasma', ...pair(def.miasma, def.upgradedMiasma) });
+  if (def.venomEdge) fx.push({ op: 'buff', status: 'venomEdge', n: def.venomEdge });
+
+  if (def.damage !== undefined || def.blockAsDamage) {
+    fx.push({
+      op: 'damage',
+      ...pair(def.damage, def.upgradedDamage),
+      ...(def.hits !== undefined ? { hits: def.hits } : {}),
+      ...(def.upgradedHits !== undefined ? { upHits: def.upgradedHits } : {}),
+      ...(def.strengthMult !== undefined ? { strMult: def.strengthMult } : {}),
+      ...(def.upgradedStrengthMult !== undefined ? { upStrMult: def.upgradedStrengthMult } : {}),
+      ...(def.blockAsDamage ? { fromBlock: true } : {}),
+      ...(def.cost === -1 ? { xHits: true } : {}),
+      ...(def.lifesteal ? { lifesteal: true } : {}),
+    });
+  }
+  if (has(def.applyVulnerable, def.upgradedApplyVulnerable)) fx.push({ op: 'debuff', status: 'vulnerable', ...pair(def.applyVulnerable, def.upgradedApplyVulnerable) });
+  if (has(def.applyWeak, def.upgradedApplyWeak)) fx.push({ op: 'debuff', status: 'weak', ...pair(def.applyWeak, def.upgradedApplyWeak) });
+  if (has(def.applyPoison, def.upgradedApplyPoison)) fx.push({ op: 'debuff', status: 'poison', ...pair(def.applyPoison, def.upgradedApplyPoison) });
+  if (has(def.doublePoison, def.upgradedDoublePoison)) fx.push({ op: 'multiplyPoison', ...pair(def.doublePoison, def.upgradedDoublePoison) });
+  if (def.rotburst) fx.push({ op: 'markRotburst' });
+
+  if (has(def.draw, def.upgradedDraw)) fx.push({ op: 'draw', ...pair(def.draw, def.upgradedDraw) });
+  if (def.noMoreDraw) fx.push({ op: 'lockDraw' });
+  if (has(def.addKnives, def.upgradedAddKnives)) fx.push({ op: 'addCard', card: 'throwing_knife', ...pair(def.addKnives, def.upgradedAddKnives) });
+  if (def.upgradeAllInCombat) fx.push({ op: 'upgradeAllInCombat' });
+  if (def.discardCount) fx.push({ op: 'discard', n: def.discardCount });
+  return fx;
+}
+
+const effectCache = new Map<string, CardEffect[]>();
+
+/** The card's effect list (its own, or compiled from its flat fields). */
+export function getCardEffects(def: CardDef): CardEffect[] {
+  if (def.effects) return def.effects;
+  let fx = effectCache.get(def.id);
+  if (!fx) {
+    fx = compileLegacyEffects(def);
+    effectCache.set(def.id, fx);
+  }
+  return fx;
+}
+
+/** First damage effect of a card, if any (used for previews and text highlighting). */
+export function getPrimaryDamageEffect(def: CardDef): Extract<CardEffect, { op: 'damage' }> | undefined {
+  return getCardEffects(def).find((e): e is Extract<CardEffect, { op: 'damage' }> => e.op === 'damage');
+}
+
+/** First block effect of a card, if any. */
+export function getPrimaryBlockEffect(def: CardDef): Extract<CardEffect, { op: 'block' }> | undefined {
+  return getCardEffects(def).find((e): e is Extract<CardEffect, { op: 'block' }> => e.op === 'block');
 }

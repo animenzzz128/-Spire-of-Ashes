@@ -135,6 +135,25 @@ export const UI_COPY = {
     noCombatYet: '尚未完成任何战斗。',
     close: '关闭',
     exhaustTag: '消耗',
+    // Ember (P2)
+    ember: '余烬',
+    emberTip: '余烬：战斗内资源，上限 10，战斗结束清零。添薪获得，职业技能花费。',
+    stokeBtn: '添薪',
+    stokeTip: '每回合 1 次：选 1 张手牌烧掉（本场战斗移除），获得 1 点余烬。状态牌和诅咒也能烧。',
+    stokePrompt: '添薪：点击一张手牌把它烧掉（再按一次添薪取消）',
+    stokeUsed: '本回合已添薪',
+    abilityUsed: '本回合已使用',
+    abilityNeedEmber: '余烬不足',
+    abilityNames: { temper: '淬火', ash_veil: '灰雾' } as Record<string, string>,
+    abilityDescs: {
+      temper: '花 2 点余烬：本回合下一张攻击牌伤害 +6（多段或群体攻击改为每段、每个目标 +3）。',
+      ash_veil: '花 2 点余烬：给予所有敌人 3 层中毒。',
+    } as Record<string, string>,
+    temperReady: '淬火就绪',
+    emberKeyHint: 'B 添薪 · Q 技能',
+    chargeTitle: '蓄能',
+    chargeNeed: (n: number) => `打断还需 ${n} 点伤害`,
+    chargeInterrupted: '已打断！',
     typeLabels: { attack: '攻击', skill: '技能', power: '能力', status: '状态', curse: '诅咒' },
     rarityLabels: { starter: '基础', common: '普通', uncommon: '罕见', rare: '稀有', special: '特殊' },
     nodeLabels: {
@@ -276,6 +295,25 @@ export const UI_COPY = {
     noCombatYet: 'No combats completed yet.',
     close: 'Close',
     exhaustTag: 'Exhaust',
+    // Ember (P2)
+    ember: 'Ember',
+    emberTip: 'Ember: a combat resource (max 10, cleared after combat). Gain it by Stoking; spend it on your class ability.',
+    stokeBtn: 'Stoke',
+    stokeTip: 'Once per turn: burn 1 card from your hand (removed for this combat) to gain 1 Ember. Statuses and curses burn too.',
+    stokePrompt: 'Stoke: click a card in your hand to burn it (press Stoke again to cancel)',
+    stokeUsed: 'Already stoked this turn',
+    abilityUsed: 'Used this turn',
+    abilityNeedEmber: 'Not enough Ember',
+    abilityNames: { temper: 'Temper', ash_veil: 'Ash Veil' } as Record<string, string>,
+    abilityDescs: {
+      temper: 'Spend 2 Ember: your next Attack this turn deals +6 damage (+3 per hit, per target for multi-hit or AoE attacks).',
+      ash_veil: 'Spend 2 Ember: apply 3 Poison to ALL enemies.',
+    } as Record<string, string>,
+    temperReady: 'Tempered',
+    emberKeyHint: 'B Stoke · Q Ability',
+    chargeTitle: 'Charging',
+    chargeNeed: (n: number) => `${n} more damage to interrupt`,
+    chargeInterrupted: 'Interrupted!',
     typeLabels: { attack: 'Attack', skill: 'Skill', power: 'Power', status: 'Status', curse: 'Curse' },
     rarityLabels: { starter: 'Starter', common: 'Common', uncommon: 'Uncommon', rare: 'Rare', special: 'Special' },
     nodeLabels: {
@@ -354,6 +392,18 @@ export const CARD_EN: Record<string, { name: string; desc: string; upgDesc?: str
   serpents_edge: { name: "Serpent's Edge", desc: 'Unblocked attack hits apply 1 Poison.' },
   night_terror: { name: 'Night Terror', desc: 'Next turn, your attacks deal 2x damage.' },
   rotburst: { name: 'Rotburst', desc: 'Apply 6 Poison. On death, deal Max HP to ALL.', upgDesc: 'Apply 9 Poison. On death, deal Max HP to ALL.' },
+  kindling_chop: { name: 'Kindling Chop', desc: 'Deal 7 damage. Gain 1 Ember.', upgDesc: 'Deal 10 damage. Gain 1 Ember.' },
+  anvil_guard: { name: 'Anvil Guard', desc: 'Gain 6 Block. Gain 1 Ember.', upgDesc: 'Gain 9 Block. Gain 1 Ember.' },
+  spark_spray: { name: 'Spark Spray', desc: 'Deal 4 damage to ALL enemies. Gain 1 Ember per enemy hit (max 2).', upgDesc: 'Deal 6 damage to ALL enemies. Gain 1 Ember per enemy hit (max 2).' },
+  aftershock: { name: 'Aftershock', desc: 'Deal 5 damage. If you Tempered this turn, hit twice.', upgDesc: 'Deal 7 damage. If you Tempered this turn, hit twice.' },
+  molten_edge: { name: 'Molten Edge', desc: 'Deal 6 damage, +3 per Ember you have (not spent).', upgDesc: 'Deal 6 damage, +4 per Ember you have (not spent).' },
+  forge_heart: { name: 'Forge Heart', desc: 'Whenever you Stoke, gain 4 Block.', upgDesc: 'Whenever you Stoke, gain 6 Block.' },
+  ash_dart: { name: 'Ash Dart', desc: 'Deal 3 damage. Echo: gain 1 Ember.', upgDesc: 'Deal 5 damage. Echo: gain 1 Ember.' },
+  smoke_step: { name: 'Smoke Step', desc: 'Gain 6 Block. Discard 1 card.', upgDesc: 'Gain 9 Block. Discard 1 card.' },
+  venom_cinders: { name: 'Venom Cinders', desc: 'Apply 3 Poison to ALL enemies.', upgDesc: 'Apply 4 Poison to ALL enemies.' },
+  echo_blade: { name: 'Echo Blade', desc: 'Deal 8 damage. Echo: add 1 Throwing Knife to your hand.', upgDesc: 'Deal 11 damage. Echo: add 1 Throwing Knife to your hand.' },
+  blade_rain: { name: 'Blade Rain', desc: 'Spend up to 5 Ember. Add 1 Throwing Knife to your hand per Ember spent.', upgDesc: 'Spend up to 5 Ember. Add 1 upgraded Throwing Knife to your hand per Ember spent.' },
+  smoldering_haze: { name: 'Smoldering Haze', desc: 'Whenever you spend Ember, apply that much Poison to ALL enemies.' },
   throwing_knife: { name: 'Throwing Knife', desc: 'Deal 4 damage. Exhaust.', upgDesc: 'Deal 6 damage. Exhaust.' },
   deft_poise: { name: 'Deft Poise', desc: 'Gain 2 Block. Draw 1 card.', upgDesc: 'Gain 4 Block. Draw 1 card.' },
   cold_glint: { name: 'Cold Glint', desc: 'Deal 3 damage. Draw 1 card.', upgDesc: 'Deal 6 damage. Draw 1 card.' },
@@ -459,6 +509,7 @@ export function tHeroSubtitle(id: HeroClassId, fallback: string, locale: Locale)
 export function tIntentLabel(intent: EnemyIntent, locale: Locale): string {
   if (locale === 'zh') return intent.label;
   if (intent.type === 'sleep') return 'Asleep · Wakes if hit';
+  if (intent.type === 'stunned') return 'Overloaded · Skips its turn';
   const parts: string[] = [];
   if (intent.damage) {
     parts.push(`Attack ${intent.damage}${intent.hits && intent.hits > 1 ? `x${intent.hits}` : ''}`);
@@ -467,6 +518,7 @@ export function tIntentLabel(intent: EnemyIntent, locale: Locale): string {
   if (intent.gainStrength) parts.push(`Strength +${intent.gainStrength}`);
   if (intent.gainZeal) parts.push(`Zeal +${intent.gainZeal}`);
   if (intent.grantsEnrage) parts.push('Enrage: your Skills give it +2 Strength');
+  if (intent.startsCharge) parts.push('Starts charging its next attack');
   if (intent.applyVulnerable) parts.push(`Vulnerable ${intent.applyVulnerable}`);
   if (intent.applyWeak) parts.push(`Weak ${intent.applyWeak}`);
   if (intent.applyFrail) parts.push(`Frail ${intent.applyFrail}`);
@@ -606,6 +658,35 @@ export function tCombatMsg(msg: CombatMsg, locale: Locale): string {
       return zh
         ? `${name}：熔炉核心超频觉醒！（力量+2、荆棘+1、格挡+10）`
         : `${name}: forge core overcharged! (Strength +2, Thorns +1, Block +10)`;
+    }
+    case 'gainEmber':
+      return zh ? `+${n} 余烬` : `+${n} Ember`;
+    case 'spendEmber':
+      return zh ? `-${n} 余烬` : `-${n} Ember`;
+    case 'temper':
+      return zh ? '淬火！下一击 +6' : 'Temper! Next attack +6';
+    case 'chargeStart':
+      return zh ? `开始蓄能（打断需 ${n} 伤害）` : `Charging (${n} damage interrupts)`;
+    case 'interrupted':
+      return zh ? '过载失衡！' : 'Overloaded!';
+    case 'stunned':
+      return zh ? '失衡：跳过行动' : 'Staggered: skips its turn';
+    case 'echo': {
+      const cardName = msg.ref ? tCard(msg.ref, locale).name : '';
+      return zh ? `余响·${cardName}` : `Echo · ${cardName}`;
+    }
+    case 'logStoke': {
+      const cardName = msg.ref ? tCard(msg.ref, locale).name : '';
+      const plus = msg.upgraded ? '+' : '';
+      return zh ? `添薪：烧掉【${cardName}${plus}】，获得 1 点余烬` : `Stoked [${cardName}${plus}] for 1 Ember`;
+    }
+    case 'logAbility': {
+      const name = msg.ref === 'temper' ? (zh ? '淬火' : 'Temper') : zh ? '灰雾' : 'Ash Veil';
+      return zh ? `使用职业技能【${name}】` : `Used class ability [${name}]`;
+    }
+    case 'logInterrupt': {
+      const name = tEnemyName(msg.ref || '', msg.name || '', locale);
+      return zh ? `${name} 的蓄能被打断，过载失衡！（跳过行动，易伤 +2）` : `${name}'s charge was interrupted! (skips its turn, Vulnerable +2)`;
     }
     default:
       return '';

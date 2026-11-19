@@ -15,6 +15,10 @@ Ascend the 15-floor Obsidian Spire. Read enemy intents with clarity, allocate li
 
 ## Core Features | 核心特性
 
+- **Ember · 余烬（P2 core mechanic）**
+  - Once per turn, **Stoke** a hand card (statuses and curses too) to burn it for 1 Ember. Spend 2 Ember on your class ability: **Temper** (Ironwarden, next Attack +6) or **Ash Veil** (Shadowweaver, 3 Poison to all enemies).
+  - The Obsidian Warden **charges** its laser every 4 turns; deal enough damage while it charges to **interrupt** it.
+  - Echo cards trigger a bonus when a card effect discards them.
 - **2 Playable Classes · 双职业构筑体系**
   - **赤铁卫士 · Ironwarden (80 HP)** — *Bloodfire Sigil*: Strength scaling, Bastion armor retention, multi-hit synergy (`Crushing Maul`, `Shield Ram`, `Infernal Avatar`, `Soul Harvest`).
   - **暗影织者 · Shadowweaver (70 HP)** — *Nightweave Ring*: Lethal Poison stacking (bypasses Block), 0-cost Throwing Knife flurries, draw/discard manipulation (`Toxic Bloom`, `Rotburst`, `Night Terror`).
@@ -45,6 +49,8 @@ Ascend the 15-floor Obsidian Spire. Read enemy intents with clarity, allocate li
 | Quick Play Card | Number keys `1` – `9` |
 | End Turn | Click **End Turn** or press `E` / `Space` |
 | Cancel Targeting | Click **Cancel** or press `Esc` |
+| Stoke (burn a card for Ember) | Click **Stoke** then a card, or hover a card and press `B` |
+| Class Ability (Temper / Ash Veil) | Click the ability button or press `Q` |
 | Inspect Piles / Deck | Click Draw Pile, Discard Pile, Exhaust Pile, or Deck HUD button |
 | Discard Potion | Hover potion slot in HUD and click `×` |
 
@@ -68,8 +74,21 @@ npm test            # engine verification (scripts/verify_game.ts)
 Balance simulation (a rule-based bot plays full runs on the real engine):
 
 ```bash
-npm run sim         # win rates, death floors, HP lost per encounter
+npm run sim         # win rates, death floors, HP lost per encounter, Ember usage
 npm run sim:check   # also assert the balance guardrails (runs in CI)
 ```
 
 The bot is weaker than a skilled player, so treat its win rates as a lower bound and compare encounters and classes against each other.
+
+Options (environment variables):
+
+| Variable | Effect |
+| --- | --- |
+| `SIM_N=500` | Runs per class (default 2000) |
+| `SIM_SEED=1` | Reproducible batch: same seed, same output |
+| `SIM_ASC=2` | Ascension level |
+| `SIM_POLICY=aggressive` | Bot blocks less |
+| `SIM_EMBER=off\|stoke\|full` | Limit what the bot does with Ember (to measure its impact) |
+| `SIM_TUNE='{"bossHp":300}'` | Override knobs from `src/game/balance.ts` for one run, to try a calibration before committing it |
+
+Engine layout: `engine.ts` (public actions), `combat.ts` (combat primitives), `effects.ts` (card effect interpreter; cards are effect lists), `hooks.ts` (relic and power triggers), `rooms.ts` (rewards, campfire, shop, treasure, events), `balance.ts` (tuning knobs), `rng.ts` (seedable RNG).

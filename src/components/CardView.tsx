@@ -10,7 +10,13 @@ import {
   Sparkles,
   Sword,
 } from 'lucide-react';
-import { CARD_DEFS, getCardCost } from '../game/cards';
+import {
+  CARD_DEFS,
+  effVal,
+  getCardCost,
+  getPrimaryBlockEffect,
+  getPrimaryDamageEffect,
+} from '../game/cards';
 import {
   calculateCardBlockPreview,
   calculateCardDamagePreview,
@@ -27,6 +33,7 @@ interface CardViewProps {
   selected?: boolean;
   disabled?: boolean;
   discardMode?: boolean;
+  stokeMode?: boolean; // hand card can be burned for Ember
   shortcutNumber?: number;
   compact?: boolean;
   draggableCard?: boolean;
@@ -158,6 +165,7 @@ export const CardView: React.FC<CardViewProps> = ({
   selected = false,
   disabled = false,
   discardMode = false,
+  stokeMode = false,
   shortcutNumber,
   compact = false,
   draggableCard = false,
@@ -184,7 +192,9 @@ export const CardView: React.FC<CardViewProps> = ({
       ? !isUnplayable
       : state.combat.energy >= (cost === -1 ? 0 : cost);
 
-  const isDisabled = disabled || (!discardMode && (!canAfford || isUnplayable));
+  const isDisabled = disabled || (!discardMode && !stokeMode && (!canAfford || isUnplayable));
+  const dmgFx = getPrimaryDamageEffect(def);
+  const blkFx = getPrimaryBlockEffect(def);
   const rawDescription = card.upgraded ? localized.upgDesc : localized.desc;
 
   const renderStyledDescription = () => {
@@ -195,17 +205,16 @@ export const CardView: React.FC<CardViewProps> = ({
     let text = rawDescription;
     const highlights: { placeholder: string; value: string; className: string }[] = [];
 
-    if (def.damage !== undefined || def.blockAsDamage) {
+    if (dmgFx) {
       const dmg = calculateCardDamagePreview(card, state, targetEnemy);
-      const baseDmg =
-        card.upgraded && def.upgradedDamage !== undefined ? def.upgradedDamage : def.damage || 0;
+      const baseDmg = effVal(dmgFx, card.upgraded);
       const cls = dmg.boosted
         ? 'font-bold text-emerald-400'
         : dmg.reduced
         ? 'font-bold text-rose-400'
         : 'font-semibold text-white';
 
-      if (def.blockAsDamage) {
+      if (dmgFx.fromBlock) {
         return locale === 'zh' ? (
           <span>
             造成 <span className={cls}>{dmg.perHit}</span> 点伤害（当前格挡）。
@@ -217,7 +226,7 @@ export const CardView: React.FC<CardViewProps> = ({
         );
       }
 
-      if (def.cost === -1) {
+      if (dmgFx.xHits) {
         const hitsNow = state.combat.energy;
         return locale === 'zh' ? (
           <span>
@@ -241,10 +250,9 @@ export const CardView: React.FC<CardViewProps> = ({
       }
     }
 
-    if (def.block !== undefined) {
+    if (blkFx) {
       const blk = calculateCardBlockPreview(card, state);
-      const baseBlk =
-        card.upgraded && def.upgradedBlock !== undefined ? def.upgradedBlock : def.block || 0;
+      const baseBlk = effVal(blkFx, card.upgraded);
       const cls = blk.boosted
         ? 'font-bold text-emerald-400'
         : blk.reduced
@@ -281,6 +289,8 @@ export const CardView: React.FC<CardViewProps> = ({
 
   const borderTone = selected
     ? 'border-amber-400 ring-2 ring-amber-400/60 shadow-[0_0_24px_rgba(245,158,11,0.35)] -translate-y-3'
+    : stokeMode
+    ? 'border-orange-400/90 ring-2 ring-orange-500/50 shadow-[0_0_18px_rgba(249,115,22,0.35)] hover:-translate-y-2'
     : discardMode
     ? 'border-rose-400/80 ring-2 ring-rose-500/40 hover:-translate-y-2'
     : def.type === 'attack'
@@ -321,7 +331,7 @@ export const CardView: React.FC<CardViewProps> = ({
       className={`group relative flex flex-col justify-between text-left rounded-xl border bg-[#161b26] transition-all duration-150 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
         compact ? 'w-36 h-52 p-2.5' : 'w-40 sm:w-44 h-60 sm:h-64 p-2.5'
       } ${borderTone} ${
-        isDisabled && !discardMode
+        isDisabled && !discardMode && !stokeMode
           ? 'opacity-55 cursor-not-allowed'
           : 'cursor-pointer hover:-translate-y-2.5 hover:z-20 shadow-lg hover:shadow-2xl'
       }`}

@@ -1,3 +1,4 @@
+import { rng } from './rng';
 import { PotionDef } from './types';
 
 export const POTION_DEFS: Record<string, PotionDef> = {
@@ -66,7 +67,7 @@ const POTION_WEIGHT: Record<PotionDef['rarity'], number> = { common: 1, uncommon
 export function rollPotion(): PotionDef {
   const all = Object.values(POTION_DEFS);
   const total = all.reduce((sum, p) => sum + POTION_WEIGHT[p.rarity], 0);
-  let r = Math.random() * total;
+  let r = rng() * total;
   for (const p of all) {
     r -= POTION_WEIGHT[p.rarity];
     if (r < 0) return p;

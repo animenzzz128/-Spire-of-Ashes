@@ -12,6 +12,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { BALANCE } from '../game/balance';
 import { Locale } from '../game/i18n';
 
 interface TutorialGuideModalProps {
@@ -52,7 +53,7 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
   const steps = [
     {
       title: zh ? '第一步：洞察敌人意图' : 'Step 1: Read Enemy Intents',
-      badge: zh ? '基础机制 1/5' : 'Basics 1/5',
+      badge: zh ? '基础机制 1/6' : 'Basics 1/6',
       summary: zh
         ? '在你的回合开始时，每个敌人头顶都会清晰展示它下回合的行动意图。'
         : 'At the start of your turn, every enemy telegraphs what it will do on its next turn.',
@@ -103,7 +104,7 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
     },
     {
       title: zh ? '第二步：能量与格挡演练（可交互）' : 'Step 2: Energy & Block Drill (Interactive)',
-      badge: zh ? '实战演练 2/5' : 'Hands-On 2/5',
+      badge: zh ? '实战演练 2/6' : 'Hands-On 2/6',
       summary: zh
         ? '敌人本回合将攻击造成 11 点伤害。尝试点击下方“铁壁防御”卡牌抵消伤害！'
         : 'The enemy intends to attack for 11 damage. Click Iron Defend below to stack Block!',
@@ -199,7 +200,7 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
     },
     {
       title: zh ? '第三步：易伤破防与斩杀连击（可交互）' : 'Step 3: Vulnerable & Lethal Combo (Interactive)',
-      badge: zh ? '伤害计算 3/5' : 'Combos 3/5',
+      badge: zh ? '伤害计算 3/6' : 'Combos 3/6',
       summary: zh
         ? '先用“破甲重击”施加易伤（攻击伤害提高 50%），再打打击即可刚好斩杀 17 血的敌人！'
         : 'Apply Vulnerable (+50% damage taken) with Armor Breaker first, then follow up with Iron Strike to defeat a 17 HP foe!',
@@ -322,7 +323,7 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
     },
     {
       title: zh ? '第四步：剧毒穿透、消耗与遗物协同' : 'Step 4: Poison, Exhaust & Relics',
-      badge: zh ? '进阶系统 4/5' : 'Systems 4/5',
+      badge: zh ? '进阶系统 4/6' : 'Systems 4/6',
       summary: zh
         ? '高塔战局不仅靠直伤：剧毒可无视敌人高额护甲，强大一次性卡牌则会进入“消耗堆”。'
         : 'Master secondary mechanics: Poison bypasses Block, Exhaust removes single-combat cards cleanly, and Relics stack passive power.',
@@ -355,8 +356,52 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
       ),
     },
     {
-      title: zh ? '第五步：攀塔路线与牌组精简法则' : 'Step 5: Climbing the 15-Floor Spire',
-      badge: zh ? '路线策略 5/5' : 'Strategy 5/5',
+      title: zh ? '第五步：余烬——添薪与职业技能' : 'Step 5: Ember, Stoke & Class Abilities',
+      badge: zh ? '核心机制 5/6' : 'Core 5/6',
+      summary: zh
+        ? '每回合可以把 1 张用不上的手牌「添薪」烧掉，换 1 点余烬；攒够 2 点就能发动职业技能。'
+        : 'Once per turn, Stoke a card you do not need to gain 1 Ember. Spend 2 Ember on your class ability.',
+      render: () => (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-orange-500/40 bg-[#1c1510] p-4 space-y-2">
+            <div className="flex items-center gap-2 font-bold text-sm text-orange-300">
+              <Flame className="h-4 w-4" />
+              <span>{zh ? '添薪（B 键）' : 'Stoke (B)'}</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {zh
+                ? '点「添薪」再点一张手牌（或悬停后按 B），这张牌本场战斗被烧掉，你获得 1 点余烬。伤口、灼伤、诅咒都能烧——敌人塞给你的垃圾也能变成燃料。添薪不算打出牌。'
+                : 'Press Stoke, then click a hand card (or hover it and press B). It burns for this combat and you gain 1 Ember. Wounds, Burns and curses burn too, and Stoking is not playing a card.'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-amber-500/40 bg-[#1c1a10] p-4 space-y-2">
+            <div className="flex items-center gap-2 font-bold text-sm text-amber-300">
+              <Zap className="h-4 w-4" />
+              <span>{zh ? '职业技能（Q 键）' : 'Class Ability (Q)'}</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {zh
+                ? '赤铁卫士「淬火」：花 2 余烬，本回合下一张攻击牌 +6 伤害。暗影织者「灰雾」：花 2 余烬，所有敌人中毒 +3。每回合 1 次，不花能量。'
+                : 'Ironwarden Temper: 2 Ember, your next Attack this turn deals +6. Shadowweaver Ash Veil: 2 Ember, 3 Poison to ALL enemies. Once per turn, no Energy.'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-violet-500/40 bg-[#17121f] p-4 space-y-2">
+            <div className="flex items-center gap-2 font-bold text-sm text-violet-300">
+              <Sparkles className="h-4 w-4" />
+              <span>{zh ? '余响与打断' : 'Echo & Interrupts'}</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {zh
+                ? '带「余响」的牌被卡牌效果丢弃时会触发额外效果。首领蓄能大招时会显示一根进度条，攒好余烬一口气打满它就能打断。'
+                : 'Echo cards trigger a bonus when a card effect discards them. When the boss charges, a bar shows how much damage interrupts it: save Ember and burst it down.'}
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: zh ? '第六步：攀塔路线与牌组精简法则' : 'Step 6: Climbing the 15-Floor Spire',
+      badge: zh ? '路线策略 6/6' : 'Strategy 6/6',
       summary: zh
         ? '在营火疗伤或锻造（+）升级、商人移除冗牌、第 8 层秘宝宝箱，最终迎战第 15 层黑曜守望者。'
         : 'Balance risky Elites for Relics, Campfire Smithing (+), Merchant card removal, and prepare for Floor 15 Obsidian Warden.',
@@ -383,8 +428,8 @@ export const TutorialGuideModal: React.FC<TutorialGuideModalProps> = ({
               <div className="font-bold text-rose-300">{zh ? '3. 备战黑曜守望者' : '3. Prepare for Floor 15'}</div>
               <p className="text-slate-300 leading-relaxed">
                 {zh
-                  ? '第 15 层首领血量降至 50% 后会觉醒强化并获得棘刺反伤，请保留药水与爆发牌收尾。'
-                  : 'At 50% HP, the Floor 15 Boss awakens with Thorns & Strength. Save potions for Phase 2!'}
+                  ? `第 15 层首领每 4 回合蓄能一次射线：蓄能期间打出 ${BALANCE.chargeThreshold} 点伤害就能打断它，否则射线会造成巨额伤害。血量降至 50% 后它还会觉醒强化并获得荆棘。`
+                  : `Every 4 turns the Floor 15 Boss charges its laser: deal ${BALANCE.chargeThreshold} damage while it charges to interrupt it, or the laser hits very hard. At 50% HP it also awakens with Thorns & Strength.`}
               </p>
             </div>
           </div>
