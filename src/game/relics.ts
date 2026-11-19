@@ -5,7 +5,7 @@ export const RELIC_DEFS: Record<string, RelicDef> = {
     id: 'burning_blood',
     name: '燃血徽记',
     rarity: 'starter',
-    description: '每场战斗结束时，回复 6 点生命值。',
+    description: '每场战斗结束时，回复 8 点生命值。',
     iconKey: 'blood_drop',
   },
   ring_of_snake: {

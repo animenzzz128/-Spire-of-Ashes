@@ -4,6 +4,8 @@ import {
   getCardCost,
   getRewardPool,
   getStarterDeck,
+  RARE_PITY_CAP,
+  RARE_PITY_STEP,
   rollCardChoices,
 } from './cards';
 import { computeEnemyNextIntent, emptyStatusMap, spawnEncounter } from './enemies';
@@ -285,7 +287,8 @@ export function enterMapNode(state: RunState, nodeId: string): RunState {
     return { ...nextBase, phase: 'SHOP', shop: generateShop(nextBase), combat: null };
   }
   if (node.type === 'treasure') {
-    const relic = rollRelic(nextBase.relics.map((r) => r.id));
+    // Treasure never rolls rare relics (a floor-8 +1 Energy relic decided whole runs).
+    const relic = rollRelic(nextBase.relics.map((r) => r.id), false);
     return {
       ...nextBase,
       phase: 'TREASURE',
@@ -409,9 +412,10 @@ function damageEnemy(
     block -= rawDamage;
     blocked = rawDamage > 0;
   } else {
-    hpDamage = rawDamage - block;
+    // Only damage that actually removes HP counts (no overkill in stats / lifesteal).
+    hpDamage = Math.min(hp, rawDamage - block);
     block = 0;
-    hp = Math.max(0, hp - hpDamage);
+    hp = hp - hpDamage;
   }
 
   let statuses = { ...enemy.statuses };
@@ -500,11 +504,11 @@ function applyBossPhase2IfNeeded(
   return {
     ...enemy,
     bossPhase2Triggered: true,
-    block: enemy.block + 16,
+    block: enemy.block + 10,
     statuses: {
       ...enemy.statuses,
       strength: enemy.statuses.strength + 2,
-      thorns: enemy.statuses.thorns + 2,
+      thorns: enemy.statuses.thorns + 1,
     },
   };
 }
@@ -534,7 +538,7 @@ function finalizeCombatIfWon(
   let nextHp = state.hp;
   let postHeal = 0;
   if (hasRelic(state.relics, 'burning_blood')) {
-    const h = Math.min(6, state.maxHp - nextHp);
+    const h = Math.min(8, state.maxHp - nextHp);
     nextHp += h;
     postHeal += h;
   }
@@ -579,10 +583,14 @@ function finalizeCombatIfWon(
     ? 28 + Math.floor(Math.random() * 12)
     : 12 + Math.floor(Math.random() * 10);
 
+  const cardChoices = rollCardChoices(state.heroId, 3, combat.isEliteFight, state.rarePity || 0);
+  const offeredRare = cardChoices.some((c) => CARD_DEFS[c.defId]?.rarity === 'rare');
+  const rarePity = offeredRare ? 0 : Math.min(RARE_PITY_CAP, (state.rarePity || 0) + RARE_PITY_STEP);
+
   const reward = {
     gold,
     goldClaimed: false,
-    cardChoices: rollCardChoices(state.heroId, 3, combat.isEliteFight),
+    cardChoices,
     cardClaimed: false,
     relic: combat.isEliteFight ? rollRelic(state.relics.map((r) => r.id)) : undefined,
     relicClaimed: false,
@@ -597,6 +605,7 @@ function finalizeCombatIfWon(
       phase: 'REWARD',
       combat: null,
       reward,
+      rarePity,
       stats: nextStats,
     },
     events,
@@ -1307,14 +1316,27 @@ export function resolveEnemyTurn(state: RunState): CombatActionResult {
     }
     if (intent.addStatusCardId && intent.addStatusCount) {
       for (let k = 0; k < intent.addStatusCount; k++) {
-        nextCombat.discardPile.push(createCardInstance(intent.addStatusCardId, false));
+        const statusCard = createCardInstance(intent.addStatusCardId, false);
+        if (intent.statusToDrawPile) {
+          const pos = Math.floor(Math.random() * (nextCombat.drawPile.length + 1));
+          nextCombat.drawPile.splice(pos, 0, statusCard);
+        } else {
+          nextCombat.discardPile.push(statusCard);
+        }
       }
       events.push({
         id: `${Date.now()}_sc_${i}`,
         targetUid: 'player',
-        msg: { key: 'statusCards', n: intent.addStatusCount, ref: intent.addStatusCardId },
+        msg: {
+          key: intent.statusToDrawPile ? 'statusCardsDraw' : 'statusCards',
+          n: intent.addStatusCount,
+          ref: intent.addStatusCardId,
+        },
         tone: 'debuff',
       });
+    }
+    if (intent.grantsEnrage) {
+      enemy.enraged = true;
     }
 
     // End of enemy turn: Ritual grants Strength, decrement enemy Vulnerable/Weak

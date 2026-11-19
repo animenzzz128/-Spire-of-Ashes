@@ -189,7 +189,8 @@ export const RestSiteView: React.FC<{
 }> = ({ state, locale, onRestHeal, onUpgradeCard }) => {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const copy = UI_COPY[locale];
-  const healAmount = Math.floor(state.maxHp * 0.3);
+  // Show the HP actually restored, not the raw 30% (which ignores the max-HP cap).
+  const healAmount = Math.min(Math.floor(state.maxHp * 0.3), state.maxHp - state.hp);
   const hasUpgradeable = state.deck.some((c) => !c.upgraded);
 
   return (

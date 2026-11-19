@@ -94,6 +94,13 @@ export function computeEnemyNextIntent(enemy: EnemyInstance, nextTurn: number): 
     return { type: 'attack', damage: 10, hits: 1, label: '酸液重压' };
   }
 
+  if (id === 'acid_slime_small') {
+    if (nextTurn % 2 === 1) {
+      return { type: 'attack', damage: 6, hits: 1, label: '酸液弹射' };
+    }
+    return { type: 'debuff', applyWeak: 1, label: '腐蚀舔舐 · 虚弱 1' };
+  }
+
   if (id === 'looter') {
     if (nextTurn <= 2) {
       return { type: 'attack', damage: 10, hits: 1, label: '劫掠突刺' };
@@ -136,8 +143,8 @@ export function computeEnemyNextIntent(enemy: EnemyInstance, nextTurn: number): 
     if (nextTurn === 1) {
       return {
         type: 'buff',
-        gainStrength: 2,
-        label: '狂暴怒吼 · 打出技能牌使我力量+2',
+        grantsEnrage: true,
+        label: '狂暴怒吼 · 之后你每打出技能牌，我力量+2',
       };
     }
     if (nextTurn % 3 === 2) {
@@ -169,16 +176,19 @@ export function computeEnemyNextIntent(enemy: EnemyInstance, nextTurn: number): 
   }
 
   if (id === 'sentry') {
-    const offset = enemy.uid.endsWith('1') || enemy.name.includes('甲') ? 0 : 1;
+    // 甲 and 丙 share a phase, 乙 alternates. (The old check also looked at the
+    // random uid suffix, which could put both twins in the same phase.)
+    const offset = enemy.name.includes('乙') ? 1 : 0;
     if ((nextTurn + offset) % 2 === 1) {
       return {
         type: 'debuff',
         addStatusCardId: 'wound',
-        addStatusCount: 2,
-        label: '脉冲干扰 · 塞入 2 张伤口',
+        addStatusCount: 1,
+        statusToDrawPile: true,
+        label: '脉冲干扰 · 抽牌堆塞入 1 张伤口',
       };
     }
-    return { type: 'attack', damage: 9, hits: 1, label: '奥术激光' };
+    return { type: 'attack', damage: 10, hits: 1, label: '奥术激光' };
   }
 
   // === FLOOR 15 BOSS: OBSIDIAN WARDEN ===
@@ -189,7 +199,7 @@ export function computeEnemyNextIntent(enemy: EnemyInstance, nextTurn: number): 
         type: 'attack_defend',
         damage: 14,
         hits: 1,
-        block: 14,
+        block: 10,
         label: '黑曜镇压 · 攻击并筑墙',
       };
     }
@@ -204,12 +214,15 @@ export function computeEnemyNextIntent(enemy: EnemyInstance, nextTurn: number): 
       };
     }
     if (cycle === 3) {
+      // Metallicize grows +2 per cycle and caps at 8, so attack decks are not
+      // locked out by ever-stacking armor (it used to grow +4 with no cap).
+      const metallicizeGain = enemy.statuses.metallicize < 8 ? 2 : 0;
       return {
         type: 'buff',
-        gainStrength: 3,
-        gainMetallicize: 4,
-        block: 12,
-        label: '熔芯超载 · 力量+3 & 护甲',
+        gainStrength: 2,
+        gainMetallicize: metallicizeGain || undefined,
+        block: 8,
+        label: metallicizeGain ? '熔芯超载 · 力量+2 & 护甲' : '熔芯超载 · 力量+2 & 格挡',
       };
     }
     return {
@@ -260,7 +273,7 @@ function makeEnemy(
 export function spawnEncounter(floor: number, type: 'monster' | 'elite' | 'boss'): EnemyInstance[] {
   if (type === 'boss') {
     return [
-      makeEnemy('obsidian_warden', '黑曜守望者', '塔顶终焉巨像', 240, 'boss_warden', {
+      makeEnemy('obsidian_warden', '黑曜守望者', '塔顶终焉巨像', 220, 'boss_warden', {
         isBoss: true,
         artifact: 2,
       }),
@@ -271,68 +284,106 @@ export function spawnEncounter(floor: number, type: 'monster' | 'elite' | 'boss'
     const roll = Math.random();
     if (roll < 0.34) {
       return [
-        makeEnemy('gremlin_nob', '狂怒地精贵族', '精英守卫 · 厌恶法术', 86, 'nob', {
+        makeEnemy('gremlin_nob', '狂怒地精贵族', '精英守卫 · 厌恶法术', 80, 'nob', {
           isElite: true,
-          enraged: true,
         }),
       ];
     }
     if (roll < 0.67) {
       return [
-        makeEnemy('lagavulin', '沉睡石像鬼', '精英守卫 · 金属甲壳', 108, 'lagavulin', {
+        makeEnemy('lagavulin', '沉睡石像鬼', '精英守卫 · 金属甲壳', 100, 'lagavulin', {
           isElite: true,
           asleep: true,
-          metallicize: 8,
+          metallicize: 6,
         }),
       ];
     }
     return [
-      makeEnemy('sentry', '古代哨兵·甲', '精英双子 · 干扰脉冲', 42, 'sentry', {
+      makeEnemy('sentry', '古代哨兵·甲', '精英三联 · 干扰脉冲', 40, 'sentry', {
         isElite: true,
         artifact: 1,
       }),
-      makeEnemy('sentry', '古代哨兵·乙', '精英双子 · 奥术光束', 44, 'sentry', {
+      makeEnemy('sentry', '古代哨兵·乙', '精英三联 · 奥术光束', 42, 'sentry', {
+        isElite: true,
+        artifact: 1,
+      }),
+      makeEnemy('sentry', '古代哨兵·丙', '精英三联 · 干扰脉冲', 40, 'sentry', {
         isElite: true,
         artifact: 1,
       }),
     ];
   }
 
-  // Early floors 1-4
+  // Normal encounters ramp in four tiers so difficulty climbs gradually
+  // instead of jumping from single enemies (floors 1-4) to full pairs (floor 5).
+  const weakSingle = (): EnemyInstance[] => {
+    const roll = Math.random();
+    if (roll < 0.34) return [makeEnemy('cultist', '深红狂信徒', '献祭学徒', randInt(44, 50), 'cultist')];
+    if (roll < 0.67) return [makeEnemy('jaw_worm', '深渊颚虫', '甲壳掠食者', randInt(40, 46), 'jawworm')];
+    return [makeEnemy('acid_slime', '大型酸液史莱姆', '腐蚀魔物', randInt(48, 54), 'slime')];
+  };
+  const smallSlime = (name: string) =>
+    makeEnemy('acid_slime_small', name, '腐蚀随从', randInt(24, 28), 'slime');
+
+  // Tier 1 (floors 1-2): weak singles
+  if (floor <= 2) return weakSingle();
+
+  // Tier 2 (floors 3-4): weak or strong singles
   if (floor <= 4) {
     const roll = Math.random();
-    if (roll < 0.34) {
-      return [makeEnemy('cultist', '深红狂信徒', '献祭学徒', randInt(44, 50), 'cultist')];
+    if (roll < 0.5) return weakSingle();
+    if (roll < 0.75) {
+      return [makeEnemy('looter', '尖塔掠夺者', '蒙面刺客', randInt(44, 48), 'looter')];
     }
-    if (roll < 0.67) {
-      return [makeEnemy('jaw_worm', '深渊颚虫', '甲壳掠食者', randInt(40, 46), 'jawworm')];
-    }
-    return [makeEnemy('acid_slime', '大型酸液史莱姆', '腐蚀魔物', randInt(48, 54), 'slime')];
+    return [
+      makeEnemy('bone_knight', '骸骨护卫', '不死盾兵', randInt(52, 56), 'boneknight', { thorns: 1 }),
+    ];
   }
 
-  // Mid-to-late floors 5-14
-  const roll = Math.random();
-  if (roll < 0.25) {
+  // Tier 3 (floors 5-7): light pairs or a strong single
+  if (floor <= 7) {
+    const roll = Math.random();
+    if (roll < 0.35) {
+      return [smallSlime('小型酸液史莱姆·甲'), smallSlime('小型酸液史莱姆·乙')];
+    }
+    if (roll < 0.7) {
+      return [
+        makeEnemy('looter', '尖塔掠夺者', '蒙面刺客', randInt(44, 48), 'looter'),
+        smallSlime('小型酸液史莱姆'),
+      ];
+    }
     return [
+      makeEnemy('bone_knight', '骸骨护卫', '不死盾兵', randInt(58, 66), 'boneknight', { thorns: 2 }),
+    ];
+  }
+
+  // Tier 4 (floors 8-14): full pairs, HP +3% per floor above 8
+  const hpScale = 1 + 0.03 * (floor - 8);
+  const scaled = (enemies: EnemyInstance[]) =>
+    enemies.map((e) => {
+      const hp = Math.round(e.maxHp * hpScale);
+      return { ...e, hp, maxHp: hp };
+    });
+  const roll = Math.random();
+  if (roll < 0.2) {
+    return scaled([
       makeEnemy('looter', '尖塔掠夺者', '蒙面刺客', randInt(46, 52), 'looter'),
       makeEnemy('acid_slime', '小型酸液史莱姆', '腐蚀随从', randInt(28, 34), 'slime'),
-    ];
+    ]);
   }
-  if (roll < 0.5) {
-    return [
-      makeEnemy('bone_knight', '骸骨护卫', '不死盾兵', randInt(58, 66), 'boneknight', {
-        thorns: 2,
-      }),
-    ];
+  if (roll < 0.4) {
+    return scaled([
+      makeEnemy('bone_knight', '骸骨护卫', '不死盾兵', randInt(58, 66), 'boneknight', { thorns: 2 }),
+    ]);
   }
-  if (roll < 0.75) {
-    return [
+  if (roll < 0.7) {
+    return scaled([
       makeEnemy('cultist', '狂热信徒', '仪式施法者', randInt(48, 54), 'cultist'),
       makeEnemy('jaw_worm', '巨型颚虫', '护卫兽', randInt(42, 48), 'jawworm'),
-    ];
+    ]);
   }
-  return [
+  return scaled([
     makeEnemy('bone_knight', '骸骨重骑', '沉铁卫士', randInt(52, 58), 'boneknight'),
     makeEnemy('looter', '影刃劫匪', '暗巷匪徒', randInt(40, 46), 'looter'),
-  ];
+  ]);
 }

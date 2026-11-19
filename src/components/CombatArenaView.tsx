@@ -929,6 +929,17 @@ export const CombatArenaView: React.FC<CombatArenaViewProps> = ({
             const dead = enemy.hp <= 0;
             const isHit = hitEnemyUids.includes(enemy.uid);
             const statuses = renderStatusTags(enemy.statuses, locale);
+            if (enemy.enraged) {
+              statuses.unshift({
+                label: locale === 'zh' ? '狂怒' : 'Enrage',
+                value: '+2',
+                tone: 'text-red-200 border-red-500/50 bg-red-950/70',
+                title:
+                  locale === 'zh'
+                    ? '你每打出一张技能牌，它获得 2 点力量'
+                    : 'Gains 2 Strength whenever you play a Skill',
+              });
+            }
             const enemyDisplayName = tEnemyName(enemy.defId, enemy.name, locale);
             const intentSubtitle = tIntentLabel(enemy.intent, locale);
             const enemyVfx = combatVfx.filter((v) => v.targetUid === enemy.uid);

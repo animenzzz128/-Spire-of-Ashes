@@ -121,6 +121,8 @@ export interface EnemyIntent {
   gainThorns?: number;
   addStatusCardId?: string;
   addStatusCount?: number;
+  statusToDrawPile?: boolean; // shuffle status cards into the draw pile instead of discard
+  grantsEnrage?: boolean; // after this intent resolves, the enemy gains Strength whenever the player plays a Skill
   label: string;
 }
 
@@ -224,6 +226,7 @@ export type CombatMsgKey =
   | 'apotheosis'
   | 'bossPhase2'
   | 'statusCards'
+  | 'statusCardsDraw'
   | 'logEnterCombat'
   | 'logMercury'
   | 'logPlayCard'
@@ -434,6 +437,7 @@ export interface RunState {
   event: EventState | null;
   treasure: TreasureState | null;
   stats: RunStats;
+  rarePity?: number; // card-reward rare bonus; optional so older saves load
   lastDamageTargetUid?: string;
   lastAttackerUid?: string;
 }
